@@ -8,34 +8,40 @@ struct HistoryView: View {
 
     var body: some View {
         NavigationStack {
-            Group {
+            ScrollView {
                 if swingStore.swings.isEmpty {
-                    EmptyHistoryView()
+                    EmptyDashboardView()
+                        .padding(.top, AppSpacing.xxl)
                 } else {
-                    List {
-                        StatsSummarySection(swingStore: swingStore)
-
-                        Section("Recent Swings") {
-                            ForEach(swingStore.swings) { swing in
-                                SwingHistoryRow(swing: swing)
-                                    .contentShape(Rectangle())
-                                    .onTapGesture {
-                                        selectedSwing = swing
-                                    }
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive) {
-                                            swingToDelete = swing
-                                            showingDeleteAlert = true
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                            }
+                    VStack(spacing: AppSpacing.lg) {
+                        // Score Highlight Card
+                        if swingStore.averageScore > 0 {
+                            ScoreHighlightCard(
+                                score: swingStore.averageScore,
+                                totalSwings: swingStore.totalSwings,
+                                improvement: swingStore.recentImprovement
+                            )
+                            .padding(.horizontal, AppSpacing.md)
                         }
+
+                        // Stats Overview
+                        StatsOverviewSection(swingStore: swingStore)
+
+                        // Recent Swings
+                        RecentSwingsSection(
+                            swings: swingStore.swings,
+                            onSelect: { swing in selectedSwing = swing },
+                            onDelete: { swing in
+                                swingToDelete = swing
+                                showingDeleteAlert = true
+                            }
+                        )
                     }
+                    .padding(.vertical, AppSpacing.md)
                 }
             }
-            .navigationTitle("History")
+            .background(Color.backgroundPrimary)
+            .navigationTitle("Dashboard")
             .sheet(item: $selectedSwing) { swing in
                 AnalysisView(swing: swing)
                     .environmentObject(swingStore)
@@ -43,108 +49,172 @@ struct HistoryView: View {
             .alert("Delete Swing?", isPresented: $showingDeleteAlert, presenting: swingToDelete) { swing in
                 Button("Cancel", role: .cancel) {}
                 Button("Delete", role: .destructive) {
-                    swingStore.deleteSwing(swing)
+                    withAnimation {
+                        swingStore.deleteSwing(swing)
+                    }
                 }
-            } message: { swing in
+            } message: { _ in
                 Text("This will permanently delete this swing recording and its analysis.")
             }
         }
     }
 }
 
-struct EmptyHistoryView: View {
+// MARK: - Empty Dashboard
+struct EmptyDashboardView: View {
     var body: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "clock.arrow.circlepath")
-                .font(.system(size: 60))
-                .foregroundColor(.gray)
+        EmptyStateView(
+            icon: "figure.golf",
+            title: "No Swings Yet",
+            message: "Record your first swing to start tracking your progress and see detailed analytics.",
+            actionTitle: nil,
+            action: nil
+        )
+    }
+}
 
-            Text("No Swings Recorded")
-                .font(.title2)
-                .fontWeight(.semibold)
+// MARK: - Score Highlight Card
+struct ScoreHighlightCard: View {
+    let score: Int
+    let totalSwings: Int
+    let improvement: Int?
 
-            Text("Record your first swing to start tracking your progress.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
+    var body: some View {
+        GolfCard {
+            HStack(spacing: AppSpacing.lg) {
+                // Score Ring
+                ScoreRing(score: score, size: 100, lineWidth: 8)
+
+                // Stats
+                VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                    Text("Your Average")
+                        .font(AppTypography.subheadline)
+                        .foregroundColor(.secondary)
+
+                    if let improvement = improvement {
+                        HStack(spacing: AppSpacing.xxs) {
+                            Image(systemName: improvement >= 0 ? "arrow.up.circle.fill" : "arrow.down.circle.fill")
+                                .foregroundColor(improvement >= 0 ? .scoreExcellent : .scoreNeedsWork)
+
+                            Text(improvement >= 0 ? "+\(improvement) points" : "\(improvement) points")
+                                .font(AppTypography.headline)
+                                .foregroundColor(improvement >= 0 ? .scoreExcellent : .scoreNeedsWork)
+                        }
+
+                        Text("compared to previous sessions")
+                            .font(AppTypography.caption1)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text("Record more swings to see trends")
+                            .font(AppTypography.caption1)
+                            .foregroundColor(.secondary)
+                    }
+
+                    Divider()
+
+                    HStack {
+                        Image(systemName: "video.fill")
+                            .font(.system(size: 12))
+                            .foregroundColor(.golfGreen)
+                        Text("\(totalSwings) swings analyzed")
+                            .font(AppTypography.caption1)
+                            .foregroundColor(.secondary)
+                    }
+                }
+
+                Spacer()
+            }
         }
     }
 }
 
-struct StatsSummarySection: View {
+// MARK: - Stats Overview Section
+struct StatsOverviewSection: View {
     @ObservedObject var swingStore: SwingStore
 
+    private var bestScore: Int {
+        swingStore.swings.compactMap { $0.analysis?.overallScore }.max() ?? 0
+    }
+
     var body: some View {
-        Section("Overview") {
-            HStack(spacing: 20) {
-                StatBox(
-                    title: "Total",
-                    value: "\(swingStore.totalSwings)",
-                    subtitle: "swings",
-                    color: .blue
-                )
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            SectionHeader("Statistics")
 
-                StatBox(
-                    title: "Average",
-                    value: "\(swingStore.averageScore)",
-                    subtitle: "score",
-                    color: .green
-                )
-
-                if let improvement = swingStore.recentImprovement {
-                    StatBox(
-                        title: "Trend",
-                        value: improvement >= 0 ? "+\(improvement)" : "\(improvement)",
-                        subtitle: "points",
-                        color: improvement >= 0 ? .green : .red
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: AppSpacing.sm) {
+                    StatCard(
+                        title: "Total Swings",
+                        value: "\(swingStore.totalSwings)",
+                        subtitle: "recorded",
+                        icon: "video.fill",
+                        color: .golfGreen
                     )
-                } else {
-                    StatBox(
-                        title: "Trend",
-                        value: "—",
-                        subtitle: "points",
-                        color: .gray
+
+                    StatCard(
+                        title: "Avg Score",
+                        value: "\(swingStore.averageScore)",
+                        subtitle: "out of 100",
+                        icon: "chart.bar.fill",
+                        color: .scoreGreat
+                    )
+
+                    if let improvement = swingStore.recentImprovement {
+                        StatCard(
+                            title: "Trend",
+                            value: improvement >= 0 ? "+\(improvement)" : "\(improvement)",
+                            subtitle: "vs last 5",
+                            icon: improvement >= 0 ? "arrow.up.right" : "arrow.down.right",
+                            color: improvement >= 0 ? .scoreExcellent : .scoreNeedsWork
+                        )
+                    }
+
+                    StatCard(
+                        title: "Best Score",
+                        value: "\(bestScore)",
+                        subtitle: "personal best",
+                        icon: "trophy.fill",
+                        color: .orange
                     )
                 }
+                .padding(.horizontal, AppSpacing.md)
             }
-            .padding(.vertical, 8)
         }
     }
 }
 
-struct StatBox: View {
-    let title: String
-    let value: String
-    let subtitle: String
-    let color: Color
+// MARK: - Recent Swings Section
+struct RecentSwingsSection: View {
+    let swings: [SwingData]
+    let onSelect: (SwingData) -> Void
+    let onDelete: (SwingData) -> Void
 
     var body: some View {
-        VStack(spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            SectionHeader("Recent Swings")
 
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(color)
-
-            Text(subtitle)
-                .font(.caption2)
-                .foregroundColor(.secondary)
+            LazyVStack(spacing: AppSpacing.sm) {
+                ForEach(swings) { swing in
+                    SwingCard(swing: swing)
+                        .onTapGesture { onSelect(swing) }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                onDelete(swing)
+                            } label: {
+                                Label("Delete", systemImage: "trash")
+                            }
+                        }
+                }
+            }
+            .padding(.horizontal, AppSpacing.md)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(color.opacity(0.1))
-        .cornerRadius(12)
     }
 }
 
-struct SwingHistoryRow: View {
+// MARK: - Swing Card
+struct SwingCard: View {
     let swing: SwingData
 
-    // Static DateFormatter for performance - created once, reused
+    // Static DateFormatter for performance
     private static let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
@@ -153,67 +223,75 @@ struct SwingHistoryRow: View {
     }()
 
     var body: some View {
-        HStack(spacing: 16) {
-            ZStack {
-                Circle()
-                    .fill(scoreBackgroundColor)
-                    .frame(width: 50, height: 50)
+        GolfCard {
+            HStack(spacing: AppSpacing.md) {
+                // Score Badge
+                ScoreBadge(score: swing.analysis?.overallScore)
 
-                if let score = swing.analysis?.overallScore {
-                    Text("\(score)")
-                        .font(.headline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.white)
-                } else {
-                    Image(systemName: "clock")
-                        .foregroundColor(.white)
-                }
-            }
+                // Info
+                VStack(alignment: .leading, spacing: AppSpacing.xxs) {
+                    Text(Self.dateFormatter.string(from: swing.recordedAt))
+                        .font(AppTypography.headline)
+                        .foregroundColor(.primary)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(formattedDate)
-                    .font(.headline)
+                    HStack(spacing: AppSpacing.md) {
+                        if let analysis = swing.analysis {
+                            Label(analysis.scoreGrade, systemImage: "star.fill")
+                                .font(AppTypography.caption1)
+                                .foregroundColor(.secondary)
+                        } else {
+                            Label("Not Analyzed", systemImage: "hourglass")
+                                .font(AppTypography.caption1)
+                                .foregroundColor(.orange)
+                        }
 
-                HStack(spacing: 12) {
-                    if let analysis = swing.analysis {
-                        Label(analysis.scoreGrade, systemImage: "star.fill")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    } else {
-                        Label("Not Analyzed", systemImage: "hourglass")
-                            .font(.caption)
+                        Label(formattedDuration, systemImage: "timer")
+                            .font(AppTypography.caption1)
                             .foregroundColor(.secondary)
                     }
-
-                    Label(formattedDuration, systemImage: "timer")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
+
+                Spacer()
+
+                // Arrow
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.secondary)
             }
-
-            Spacer()
-
-            Image(systemName: "chevron.right")
-                .font(.caption)
-                .foregroundColor(.secondary)
         }
-        .padding(.vertical, 4)
-    }
-
-    private var scoreBackgroundColor: Color {
-        guard let score = swing.analysis?.overallScore else {
-            return .gray
-        }
-        return ScoreColorHelper.color(for: score)
-    }
-
-    private var formattedDate: String {
-        Self.dateFormatter.string(from: swing.recordedAt)
     }
 
     private var formattedDuration: String {
         let seconds = Int(swing.duration)
         return "\(seconds)s"
+    }
+}
+
+// MARK: - Score Badge
+struct ScoreBadge: View {
+    let score: Int?
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(backgroundColor)
+                .frame(width: 56, height: 56)
+
+            if let score = score {
+                Text("\(score)")
+                    .font(AppTypography.scoreSmall)
+                    .foregroundColor(.white)
+            } else {
+                Image(systemName: "play.fill")
+                    .font(.system(size: 18))
+                    .foregroundColor(.white)
+            }
+        }
+    }
+
+    private var backgroundColor: Color {
+        guard let score = score else { return .gray }
+        return ScoreColorHelper.color(for: score)
     }
 }
 

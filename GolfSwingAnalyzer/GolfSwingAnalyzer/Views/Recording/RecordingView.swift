@@ -8,56 +8,55 @@ struct RecordingView: View {
     @State private var currentSwing: SwingData?
     @State private var permissionGranted = false
     @State private var showPermissionAlert = false
+    @State private var showGuideOverlay = true
 
     var body: some View {
         NavigationStack {
             ZStack {
                 if permissionGranted {
+                    // Camera Preview
                     CameraPreviewView(cameraService: cameraService)
                         .ignoresSafeArea()
 
+                    // Guide Overlay
+                    if showGuideOverlay && !cameraService.isRecording {
+                        SwingGuideOverlay()
+                    }
+
+                    // Recording Controls
                     VStack {
+                        // Top Bar
+                        RecordingTopBar(
+                            showGuide: $showGuideOverlay,
+                            isRecording: cameraService.isRecording
+                        )
+
                         Spacer()
 
+                        // Recording Status
                         if cameraService.isRecording {
-                            RecordingIndicator(duration: cameraService.recordingDuration)
-                                .padding(.bottom, 20)
+                            RecordingStatusBadge(duration: cameraService.recordingDuration)
+                                .padding(.bottom, AppSpacing.lg)
+                                .transition(.scale.combined(with: .opacity))
                         }
 
-                        HStack(spacing: 60) {
-                            Button(action: {}) {
-                                Image(systemName: "photo.on.rectangle")
-                                    .font(.title)
-                                    .foregroundColor(.white)
-                            }
-
-                            RecordButton(isRecording: cameraService.isRecording) {
-                                if cameraService.isRecording {
-                                    cameraService.stopRecording()
-                                } else {
-                                    cameraService.startRecording()
+                        // Bottom Controls
+                        RecordingControlsBar(
+                            isRecording: cameraService.isRecording,
+                            onRecord: {
+                                withAnimation(.spring(response: 0.3)) {
+                                    if cameraService.isRecording {
+                                        cameraService.stopRecording()
+                                    } else {
+                                        cameraService.startRecording()
+                                    }
                                 }
                             }
-
-                            Button(action: {}) {
-                                Image(systemName: "arrow.triangle.2.circlepath.camera")
-                                    .font(.title)
-                                    .foregroundColor(.white)
-                            }
-                        }
-                        .padding(.bottom, 40)
-                    }
-
-                    VStack {
-                        HStack {
-                            Spacer()
-                            TipsOverlay()
-                        }
-                        .padding()
-                        Spacer()
+                        )
+                        .padding(.bottom, AppSpacing.xl)
                     }
                 } else {
-                    PermissionRequestView {
+                    CameraPermissionView {
                         Task {
                             permissionGranted = await cameraService.requestPermissions()
                             if permissionGranted {
@@ -73,6 +72,7 @@ struct RecordingView: View {
             .navigationTitle("Record Swing")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbarColorScheme(.dark, for: .navigationBar)
             .onChange(of: cameraService.recordedVideoURL) { _, newURL in
                 if let url = newURL {
                     let swing = SwingData(videoURL: url, duration: cameraService.recordingDuration)
@@ -109,6 +109,7 @@ struct RecordingView: View {
     }
 }
 
+// MARK: - Camera Preview
 struct CameraPreviewView: UIViewRepresentable {
     let cameraService: CameraService
 
@@ -131,48 +132,97 @@ struct CameraPreviewView: UIViewRepresentable {
     }
 }
 
-struct RecordButton: View {
+// MARK: - Top Bar
+struct RecordingTopBar: View {
+    @Binding var showGuide: Bool
     let isRecording: Bool
-    let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            ZStack {
-                Circle()
-                    .stroke(Color.white, lineWidth: 4)
-                    .frame(width: 80, height: 80)
+        HStack {
+            // Guide Toggle
+            Button(action: { showGuide.toggle() }) {
+                Image(systemName: showGuide ? "person.fill.viewfinder" : "person.viewfinder")
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundColor(.white)
+                    .padding(AppSpacing.sm)
+                    .background(.ultraThinMaterial)
+                    .clipShape(Circle())
+            }
+            .disabled(isRecording)
+            .opacity(isRecording ? 0.5 : 1)
 
-                if isRecording {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.red)
-                        .frame(width: 32, height: 32)
-                } else {
-                    Circle()
-                        .fill(Color.red)
-                        .frame(width: 64, height: 64)
+            Spacer()
+
+            // Tips Button
+            TipsButton()
+        }
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.top, AppSpacing.sm)
+    }
+}
+
+// MARK: - Swing Guide Overlay
+struct SwingGuideOverlay: View {
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                // Vertical center line
+                Rectangle()
+                    .fill(Color.golfGreen.opacity(0.5))
+                    .frame(width: 2)
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+
+                // Body outline guide
+                Image(systemName: "figure.golf")
+                    .font(.system(size: 200, weight: .ultraLight))
+                    .foregroundColor(.white.opacity(0.2))
+                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2 - 40)
+
+                // Guide text
+                VStack {
+                    Spacer()
+                    Text("Align your stance with the guide")
+                        .font(AppTypography.caption1)
+                        .foregroundColor(.white.opacity(0.8))
+                        .padding(.horizontal, AppSpacing.md)
+                        .padding(.vertical, AppSpacing.xs)
+                        .background(.ultraThinMaterial)
+                        .cornerRadius(AppCornerRadius.small)
+                        .padding(.bottom, 140)
                 }
             }
         }
     }
 }
 
-struct RecordingIndicator: View {
+// MARK: - Recording Status Badge
+struct RecordingStatusBadge: View {
     let duration: TimeInterval
+    @State private var isAnimating = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AppSpacing.xs) {
             Circle()
                 .fill(Color.red)
                 .frame(width: 12, height: 12)
+                .scaleEffect(isAnimating ? 1.2 : 1.0)
+                .animation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true), value: isAnimating)
+
+            Text("REC")
+                .font(AppTypography.caption1)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
 
             Text(formatDuration(duration))
                 .font(.system(.body, design: .monospaced))
+                .fontWeight(.medium)
                 .foregroundColor(.white)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(Color.black.opacity(0.6))
-        .cornerRadius(20)
+        .padding(.horizontal, AppSpacing.md)
+        .padding(.vertical, AppSpacing.xs)
+        .background(Color.red.opacity(0.9))
+        .cornerRadius(AppCornerRadius.circular)
+        .onAppear { isAnimating = true }
     }
 
     private func formatDuration(_ duration: TimeInterval) -> String {
@@ -183,76 +233,203 @@ struct RecordingIndicator: View {
     }
 }
 
-struct TipsOverlay: View {
+// MARK: - Recording Controls Bar
+struct RecordingControlsBar: View {
+    let isRecording: Bool
+    let onRecord: () -> Void
+
+    var body: some View {
+        HStack(spacing: AppSpacing.xxl) {
+            // Gallery Button
+            Button(action: {}) {
+                VStack(spacing: 4) {
+                    Image(systemName: "photo.on.rectangle")
+                        .font(.system(size: 24))
+                    Text("Gallery")
+                        .font(AppTypography.caption2)
+                }
+                .foregroundColor(.white)
+            }
+            .opacity(isRecording ? 0.3 : 1)
+            .disabled(isRecording)
+
+            // Record Button
+            RecordButtonPro(isRecording: isRecording, action: onRecord)
+
+            // Flip Camera Button
+            Button(action: {}) {
+                VStack(spacing: 4) {
+                    Image(systemName: "camera.rotate")
+                        .font(.system(size: 24))
+                    Text("Flip")
+                        .font(AppTypography.caption2)
+                }
+                .foregroundColor(.white)
+            }
+            .opacity(isRecording ? 0.3 : 1)
+            .disabled(isRecording)
+        }
+    }
+}
+
+// MARK: - Professional Record Button
+struct RecordButtonPro: View {
+    let isRecording: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            ZStack {
+                // Outer ring
+                Circle()
+                    .stroke(Color.white, lineWidth: 4)
+                    .frame(width: 84, height: 84)
+
+                // Inner shape
+                Group {
+                    if isRecording {
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.red)
+                            .frame(width: 32, height: 32)
+                    } else {
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.red, Color.red.opacity(0.8)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                            .frame(width: 68, height: 68)
+                    }
+                }
+                .animation(.spring(response: 0.3), value: isRecording)
+            }
+        }
+        .scaleEffect(isRecording ? 0.95 : 1.0)
+        .animation(.spring(response: 0.2), value: isRecording)
+    }
+}
+
+// MARK: - Tips Button
+struct TipsButton: View {
     @State private var showTips = false
 
     var body: some View {
         Button(action: { showTips.toggle() }) {
-            Image(systemName: "questionmark.circle.fill")
-                .font(.title2)
-                .foregroundColor(.white)
+            Image(systemName: "lightbulb.fill")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundColor(.yellow)
+                .padding(AppSpacing.sm)
+                .background(.ultraThinMaterial)
+                .clipShape(Circle())
         }
         .popover(isPresented: $showTips) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Recording Tips")
-                    .font(.headline)
-
-                TipRow(icon: "camera.viewfinder", text: "Position camera at hip height")
-                TipRow(icon: "figure.stand", text: "Ensure full body is visible")
-                TipRow(icon: "sun.max", text: "Use good lighting")
-                TipRow(icon: "arrow.left.and.right", text: "Record from down-the-line or face-on")
-            }
-            .padding()
-            .presentationCompactAdaptation(.popover)
+            RecordingTipsPopover()
+                .presentationCompactAdaptation(.popover)
         }
     }
 }
 
-struct TipRow: View {
+// MARK: - Tips Popover
+struct RecordingTipsPopover: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.md) {
+            HStack {
+                Image(systemName: "lightbulb.fill")
+                    .foregroundColor(.yellow)
+                Text("Recording Tips")
+                    .font(AppTypography.headline)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: AppSpacing.sm) {
+                TipItemRow(icon: "camera.viewfinder", text: "Position camera at hip height", color: .golfGreen)
+                TipItemRow(icon: "figure.stand", text: "Ensure full body is visible", color: .golfGreen)
+                TipItemRow(icon: "sun.max.fill", text: "Use good lighting conditions", color: .orange)
+                TipItemRow(icon: "arrow.left.and.right", text: "Film from down-the-line or face-on", color: .blue)
+                TipItemRow(icon: "timer", text: "Record 3-5 second swings", color: .purple)
+            }
+        }
+        .padding(AppSpacing.md)
+        .frame(width: 280)
+    }
+}
+
+struct TipItemRow: View {
     let icon: String
     let text: String
+    let color: Color
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: AppSpacing.sm) {
             Image(systemName: icon)
-                .foregroundColor(.green)
+                .font(.system(size: 16))
+                .foregroundColor(color)
                 .frame(width: 24)
             Text(text)
-                .font(.subheadline)
+                .font(AppTypography.subheadline)
+                .foregroundColor(.primary)
         }
     }
 }
 
-struct PermissionRequestView: View {
+// MARK: - Permission View
+struct CameraPermissionView: View {
     let onRequest: () -> Void
 
     var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "camera.fill")
-                .font(.system(size: 60))
-                .foregroundColor(.green)
+        VStack(spacing: AppSpacing.xl) {
+            Spacer()
 
-            Text("Camera Access Required")
-                .font(.title2)
-                .fontWeight(.semibold)
+            // Icon
+            ZStack {
+                Circle()
+                    .fill(Color.golfGreen.opacity(0.1))
+                    .frame(width: 120, height: 120)
 
-            Text("To record and analyze your golf swing, we need access to your camera.")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-
-            Button(action: onRequest) {
-                Text("Enable Camera")
-                    .fontWeight(.semibold)
-                    .foregroundColor(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(Color.green)
-                    .cornerRadius(12)
+                Image(systemName: "video.fill")
+                    .font(.system(size: 48))
+                    .foregroundColor(.golfGreen)
             }
-            .padding(.horizontal, 40)
+
+            // Text
+            VStack(spacing: AppSpacing.sm) {
+                Text("Camera Access Required")
+                    .font(AppTypography.title2)
+                    .foregroundColor(.primary)
+
+                Text("To record and analyze your golf swing, we need access to your camera and microphone.")
+                    .font(AppTypography.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, AppSpacing.xl)
+            }
+
+            // Button
+            Button(action: onRequest) {
+                HStack {
+                    Image(systemName: "camera.fill")
+                    Text("Enable Camera Access")
+                }
+            }
+            .buttonStyle(PrimaryButtonStyle())
+            .padding(.horizontal, AppSpacing.xl)
+
+            Spacer()
+
+            // Privacy note
+            HStack(spacing: AppSpacing.xxs) {
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 12))
+                Text("Videos are stored locally and never uploaded")
+                    .font(AppTypography.caption2)
+            }
+            .foregroundColor(.secondary)
+            .padding(.bottom, AppSpacing.lg)
         }
+        .background(Color.backgroundPrimary)
     }
 }
 
