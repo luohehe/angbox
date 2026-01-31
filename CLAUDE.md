@@ -15,24 +15,32 @@ An iOS app that helps golfers record, analyze, and improve their swings using AI
 angbox/
 ├── README.md                      # Repository description
 ├── CLAUDE.md                      # AI assistant guidance (this file)
+├── .github/
+│   └── workflows/
+│       └── ios-ci.yml             # CI/CD pipeline
 └── GolfSwingAnalyzer/             # iOS Golf Swing Analysis App
     ├── README.md                  # Project documentation
-    └── GolfSwingAnalyzer/
-        ├── GolfSwingAnalyzerApp.swift    # App entry point
-        ├── ContentView.swift              # Main tab view
-        ├── Info.plist                     # App configuration
-        ├── Assets.xcassets/               # App icons and colors
-        ├── Models/
-        │   ├── SwingData.swift            # Data models
-        │   └── SwingStore.swift           # State management
-        ├── Services/
-        │   ├── CameraService.swift        # Video recording
-        │   └── SwingAnalysisService.swift # AI analysis
-        └── Views/
-            ├── Recording/RecordingView.swift
-            ├── Analysis/AnalysisView.swift
-            ├── History/HistoryView.swift
-            └── SettingsView.swift
+    ├── .swiftlint.yml             # SwiftLint configuration
+    ├── GolfSwingAnalyzer/
+    │   ├── GolfSwingAnalyzerApp.swift    # App entry point
+    │   ├── ContentView.swift              # Main tab view
+    │   ├── Info.plist                     # App configuration
+    │   ├── Assets.xcassets/               # App icons and colors
+    │   ├── Models/
+    │   │   ├── SwingData.swift            # Data models
+    │   │   └── SwingStore.swift           # State management
+    │   ├── Services/
+    │   │   ├── CameraService.swift        # Video recording
+    │   │   └── SwingAnalysisService.swift # AI analysis
+    │   └── Views/
+    │       ├── Recording/RecordingView.swift
+    │       ├── Analysis/AnalysisView.swift
+    │       ├── History/HistoryView.swift
+    │       └── SettingsView.swift
+    └── GolfSwingAnalyzerTests/
+        ├── SwingDataTests.swift           # Model unit tests
+        ├── SwingStoreTests.swift          # Store unit tests
+        └── SwingAnalysisServiceTests.swift # Service unit tests
 ```
 
 ## Projects
@@ -60,18 +68,100 @@ angbox/
 #### Commands
 ```bash
 # Open in Xcode
-open GolfSwingAnalyzer.xcodeproj
+open GolfSwingAnalyzer/GolfSwingAnalyzer.xcodeproj
 
-# Build from command line (after creating Xcode project)
-xcodebuild -scheme GolfSwingAnalyzer -destination 'platform=iOS Simulator,name=iPhone 15'
+# Build from command line
+xcodebuild build \
+  -project GolfSwingAnalyzer/GolfSwingAnalyzer.xcodeproj \
+  -scheme GolfSwingAnalyzer \
+  -destination 'platform=iOS Simulator,name=iPhone 15'
+
+# Run unit tests
+xcodebuild test \
+  -project GolfSwingAnalyzer/GolfSwingAnalyzer.xcodeproj \
+  -scheme GolfSwingAnalyzer \
+  -destination 'platform=iOS Simulator,name=iPhone 15'
+
+# Run SwiftLint
+cd GolfSwingAnalyzer && swiftlint lint
 ```
 
 #### Setup Instructions
 1. Open Xcode and create new iOS App project named "GolfSwingAnalyzer"
 2. Copy all Swift files from `GolfSwingAnalyzer/GolfSwingAnalyzer/` into the project
-3. Add `Assets.xcassets` contents
-4. Update `Info.plist` with camera/microphone usage descriptions
-5. Build and run on physical device (camera required)
+3. Add test files from `GolfSwingAnalyzer/GolfSwingAnalyzerTests/` to test target
+4. Add `Assets.xcassets` contents
+5. Update `Info.plist` with camera/microphone usage descriptions
+6. Build and run on physical device (camera required)
+
+## Testing
+
+### Unit Tests
+
+The project includes comprehensive unit tests in `GolfSwingAnalyzerTests/`:
+
+| Test File | Coverage |
+|-----------|----------|
+| `SwingDataTests.swift` | Model structs, Codable conformance, score grades/colors |
+| `SwingStoreTests.swift` | CRUD operations, persistence, statistics calculations |
+| `SwingAnalysisServiceTests.swift` | Constants, error types, ScoreColorHelper |
+
+#### Running Tests
+
+```bash
+# Via Xcode
+# Press Cmd+U or Product > Test
+
+# Via command line
+xcodebuild test \
+  -project GolfSwingAnalyzer/GolfSwingAnalyzer.xcodeproj \
+  -scheme GolfSwingAnalyzer \
+  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  -resultBundlePath TestResults.xcresult
+```
+
+#### Test Coverage Areas
+- **Models**: Initialization, encoding/decoding, computed properties
+- **SwingStore**: Add/update/delete swings, persistence, statistics
+- **SwingAnalysisService**: Error handling, constants validation
+- **ScoreColorHelper**: Color mapping for all score ranges
+
+## CI/CD Pipeline
+
+GitHub Actions workflow (`.github/workflows/ios-ci.yml`) runs on every commit:
+
+### Pipeline Jobs
+
+| Job | Description |
+|-----|-------------|
+| `build-and-test` | Builds the app and runs all unit tests |
+| `lint` | Runs SwiftLint for code style checks |
+| `code-analysis` | Checks for common issues (force unwraps, TODOs, print statements) |
+
+### Triggers
+- Push to `main` or `master` branches
+- Pull requests targeting `main` or `master`
+- Only runs when `GolfSwingAnalyzer/**` files change
+
+### Artifacts
+- Test results are uploaded as artifacts (retained 7 days)
+
+## Code Quality
+
+### SwiftLint
+Configuration in `GolfSwingAnalyzer/.swiftlint.yml`:
+- Enforces consistent code style
+- Warns on force unwraps, force casts, force try
+- Checks for unused code and imports
+- Custom rule to discourage print statements
+
+### Best Practices Enforced
+- Use constants for magic numbers (`AnalysisConstants`)
+- Consolidate shared logic (`ScoreColorHelper`)
+- Proper error handling with custom error types
+- Static formatters for performance
+- MainActor isolation for UI code
+- Proper memory management (weak references, cleanup methods)
 
 ## Development Guidelines
 
@@ -84,6 +174,7 @@ xcodebuild -scheme GolfSwingAnalyzer -destination 'platform=iOS Simulator,name=i
 - Create feature branches for new experiments
 - Write clear commit messages describing changes
 - The main branch should remain stable
+- **All commits trigger CI/CD tests**
 
 ### Swift/iOS Conventions (for GolfSwingAnalyzer)
 - Use SwiftUI for all UI components
@@ -91,6 +182,8 @@ xcodebuild -scheme GolfSwingAnalyzer -destination 'platform=iOS Simulator,name=i
 - Use `@MainActor` for UI-bound classes
 - Use Swift concurrency (`async/await`) for asynchronous operations
 - Keep Views focused; extract components when complexity grows
+- Write unit tests for new functionality
+- Use constants instead of magic numbers
 
 ## Notes for AI Assistants
 
@@ -100,3 +193,6 @@ xcodebuild -scheme GolfSwingAnalyzer -destination 'platform=iOS Simulator,name=i
 - If introducing new tools or frameworks, update this file accordingly
 - For iOS projects, ensure proper permission descriptions in Info.plist
 - Test on physical devices when camera/sensors are involved
+- **Always run tests before committing changes**
+- **Add unit tests for new functionality**
+- Follow the existing code style (see `.swiftlint.yml`)

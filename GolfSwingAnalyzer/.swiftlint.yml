@@ -1,0 +1,101 @@
+# SwiftLint Configuration for GolfSwingAnalyzer
+
+# Paths to include
+included:
+  - GolfSwingAnalyzer
+  - GolfSwingAnalyzerTests
+
+# Paths to exclude
+excluded:
+  - Pods
+  - Carthage
+  - .build
+  - DerivedData
+
+# Rules configuration
+disabled_rules:
+  - trailing_whitespace
+  - line_length
+  - function_body_length
+  - type_body_length
+  - file_length
+
+opt_in_rules:
+  - empty_count
+  - empty_string
+  - closure_spacing
+  - contains_over_filter_count
+  - contains_over_filter_is_empty
+  - contains_over_first_not_nil
+  - discouraged_object_literal
+  - empty_collection_literal
+  - first_where
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - last_where
+  - legacy_multiple
+  - modifier_order
+  - overridden_super_call
+  - private_action
+  - private_outlet
+  - redundant_nil_coalescing
+  - sorted_first_last
+  - toggle_bool
+  - unused_declaration
+  - unused_import
+  - vertical_whitespace_closing_braces
+  - vertical_whitespace_opening_braces
+  - yoda_condition
+
+# Configuration for specific rules
+force_cast:
+  severity: warning
+
+force_try:
+  severity: warning
+
+force_unwrapping:
+  severity: warning
+
+identifier_name:
+  min_length:
+    warning: 2
+    error: 1
+  max_length:
+    warning: 50
+    error: 60
+  excluded:
+    - id
+    - x
+    - y
+    - dx
+    - dy
+    - i
+    - kp
+
+cyclomatic_complexity:
+  warning: 15
+  error: 25
+
+nesting:
+  type_level:
+    warning: 3
+  function_level:
+    warning: 5
+
+large_tuple:
+  warning: 3
+  error: 4
+
+# Custom rules
+custom_rules:
+  no_print_in_production:
+    name: "No print statements"
+    regex: "\\bprint\\s*\\("
+    message: "Consider using a logging framework instead of print()"
+    severity: warning
+    match_kinds:
+      - identifier
+
+# Reporter type (xcode, json, csv, checkstyle, codeclimate, junit, html, emoji, sonarqube, markdown, github-actions-logging)
+reporter: "xcode"

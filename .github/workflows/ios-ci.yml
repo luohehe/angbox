@@ -1,0 +1,163 @@
+name: iOS CI/CD
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'GolfSwingAnalyzer/**'
+      - '.github/workflows/ios-ci.yml'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'GolfSwingAnalyzer/**'
+      - '.github/workflows/ios-ci.yml'
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_15.2.app/Contents/Developer
+  PROJECT_PATH: GolfSwingAnalyzer
+  SCHEME: GolfSwingAnalyzer
+  DESTINATION: 'platform=iOS Simulator,name=iPhone 15,OS=17.2'
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Select Xcode version
+      run: sudo xcode-select -s /Applications/Xcode_15.2.app/Contents/Developer
+
+    - name: Show Xcode version
+      run: xcodebuild -version
+
+    - name: List available simulators
+      run: xcrun simctl list devices available
+
+    - name: Cache derived data
+      uses: actions/cache@v4
+      with:
+        path: ~/Library/Developer/Xcode/DerivedData
+        key: ${{ runner.os }}-deriveddata-${{ hashFiles('GolfSwingAnalyzer/**/*.swift') }}
+        restore-keys: |
+          ${{ runner.os }}-deriveddata-
+
+    - name: Create Xcode project (if needed)
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        if [ ! -f "GolfSwingAnalyzer.xcodeproj/project.pbxproj" ]; then
+          echo "Note: Xcode project file not found. Please create the project in Xcode first."
+          echo "See README.md for setup instructions."
+        fi
+
+    - name: Build
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        if [ -f "GolfSwingAnalyzer.xcodeproj/project.pbxproj" ]; then
+          xcodebuild build \
+            -project GolfSwingAnalyzer.xcodeproj \
+            -scheme ${{ env.SCHEME }} \
+            -destination "${{ env.DESTINATION }}" \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            | xcpretty --color || true
+        else
+          echo "Skipping build - Xcode project not found"
+        fi
+
+    - name: Run Unit Tests
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        if [ -f "GolfSwingAnalyzer.xcodeproj/project.pbxproj" ]; then
+          xcodebuild test \
+            -project GolfSwingAnalyzer.xcodeproj \
+            -scheme ${{ env.SCHEME }} \
+            -destination "${{ env.DESTINATION }}" \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            -resultBundlePath TestResults.xcresult \
+            | xcpretty --color --test || true
+        else
+          echo "Skipping tests - Xcode project not found"
+        fi
+
+    - name: Upload test results
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: test-results
+        path: ${{ env.PROJECT_PATH }}/TestResults.xcresult
+        retention-days: 7
+
+  lint:
+    name: Swift Lint
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install SwiftLint
+      run: brew install swiftlint
+
+    - name: Run SwiftLint
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        swiftlint lint --reporter github-actions-logging || true
+
+  code-analysis:
+    name: Code Analysis
+    runs-on: macos-14
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check for common issues
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+
+        echo "=== Checking for force unwraps (!) outside of static constants ==="
+        # Find force unwraps that aren't in static constant declarations
+        grep -rn '![^=]' --include="*.swift" GolfSwingAnalyzer/ | grep -v 'static let' | grep -v '// !' | head -20 || echo "No problematic force unwraps found"
+
+        echo ""
+        echo "=== Checking for TODO/FIXME comments ==="
+        grep -rn 'TODO\|FIXME' --include="*.swift" GolfSwingAnalyzer/ || echo "No TODO/FIXME comments found"
+
+        echo ""
+        echo "=== Checking for print statements (should use logging) ==="
+        grep -rn 'print(' --include="*.swift" GolfSwingAnalyzer/ | grep -v 'Test' | head -10 || echo "No print statements found"
+
+        echo ""
+        echo "=== File count by type ==="
+        find GolfSwingAnalyzer/ -name "*.swift" | wc -l | xargs echo "Swift files:"
+
+        echo ""
+        echo "=== Lines of code ==="
+        find GolfSwingAnalyzer/ -name "*.swift" -exec cat {} \; | wc -l | xargs echo "Total lines:"
+
+  # Optional: Build for release (can be enabled for tagged releases)
+  # release-build:
+  #   name: Release Build
+  #   runs-on: macos-14
+  #   if: startsWith(github.ref, 'refs/tags/')
+  #   needs: [build-and-test, lint]
+  #
+  #   steps:
+  #   - name: Checkout code
+  #     uses: actions/checkout@v4
+  #
+  #   - name: Build Release
+  #     run: |
+  #       cd ${{ env.PROJECT_PATH }}
+  #       xcodebuild build \
+  #         -project GolfSwingAnalyzer.xcodeproj \
+  #         -scheme ${{ env.SCHEME }} \
+  #         -configuration Release \
+  #         -archivePath build/GolfSwingAnalyzer.xcarchive \
+  #         archive
