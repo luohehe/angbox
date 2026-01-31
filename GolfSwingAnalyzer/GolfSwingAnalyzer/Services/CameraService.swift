@@ -2,6 +2,12 @@ import AVFoundation
 import SwiftUI
 import Combine
 
+// MARK: - Camera Constants
+private enum CameraConstants {
+    static let timerInterval: TimeInterval = 0.1
+    static let preferredFrameRate: Int32 = 30
+}
+
 @MainActor
 class CameraService: NSObject, ObservableObject {
     @Published var isRecording = false
@@ -13,12 +19,14 @@ class CameraService: NSObject, ObservableObject {
     private var videoOutput: AVCaptureMovieFileOutput?
     private var previewLayer: AVCaptureVideoPreviewLayer?
     private var recordingTimer: Timer?
+    private let sessionQueue = DispatchQueue(label: "com.golfswing.camera.session")
 
     enum CameraError: LocalizedError {
         case cameraUnavailable
         case cannotAddInput
         case cannotAddOutput
         case recordingFailed(String)
+        case audioSessionFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -30,6 +38,8 @@ class CameraService: NSObject, ObservableObject {
                 return "Cannot add video output"
             case .recordingFailed(let message):
                 return "Recording failed: \(message)"
+            case .audioSessionFailed(let message):
+                return "Audio session failed: \(message)"
             }
         }
     }
@@ -39,6 +49,9 @@ class CameraService: NSObject, ObservableObject {
     }
 
     func setupCamera() async throws {
+        // Configure audio session first
+        try configureAudioSession()
+
         let session = AVCaptureSession()
         session.sessionPreset = .high
 
@@ -47,6 +60,9 @@ class CameraService: NSObject, ObservableObject {
         }
 
         do {
+            // Configure camera device
+            try configureCamera(camera)
+
             let input = try AVCaptureDeviceInput(device: camera)
             if session.canAddInput(input) {
                 session.addInput(input)
@@ -76,16 +92,52 @@ class CameraService: NSObject, ObservableObject {
         }
     }
 
+    private func configureAudioSession() throws {
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playAndRecord, options: [.defaultToSpeaker, .allowBluetooth])
+            try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+        } catch {
+            throw CameraError.audioSessionFailed(error.localizedDescription)
+        }
+    }
+
+    private func configureCamera(_ camera: AVCaptureDevice) throws {
+        try camera.lockForConfiguration()
+        defer { camera.unlockForConfiguration() }
+
+        // Set frame rate
+        if let range = camera.activeFormat.videoSupportedFrameRateRanges.first {
+            let targetFrameRate = min(Double(CameraConstants.preferredFrameRate), range.maxFrameRate)
+            camera.activeVideoMinFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFrameRate))
+            camera.activeVideoMaxFrameDuration = CMTime(value: 1, timescale: CMTimeScale(targetFrameRate))
+        }
+
+        // Enable continuous autofocus and auto exposure
+        if camera.isFocusModeSupported(.continuousAutoFocus) {
+            camera.focusMode = .continuousAutoFocus
+        }
+        if camera.isExposureModeSupported(.continuousAutoExposure) {
+            camera.exposureMode = .continuousAutoExposure
+        }
+    }
+
     func startSession() {
-        Task.detached { [weak self] in
+        sessionQueue.async { [weak self] in
             self?.captureSession?.startRunning()
         }
     }
 
     func stopSession() {
-        Task.detached { [weak self] in
+        sessionQueue.async { [weak self] in
             self?.captureSession?.stopRunning()
         }
+    }
+
+    func cleanup() {
+        recordingTimer?.invalidate()
+        recordingTimer = nil
+        stopSession()
+        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
     func getPreviewLayer() -> AVCaptureVideoPreviewLayer? {
@@ -108,10 +160,8 @@ class CameraService: NSObject, ObservableObject {
         isRecording = true
         recordingDuration = 0
 
-        recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                self?.recordingDuration += 0.1
-            }
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: CameraConstants.timerInterval, repeats: true) { [weak self] _ in
+            self?.recordingDuration += CameraConstants.timerInterval
         }
     }
 

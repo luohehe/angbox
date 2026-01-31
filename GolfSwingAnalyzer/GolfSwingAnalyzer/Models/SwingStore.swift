@@ -27,20 +27,26 @@ class SwingStore: ObservableObject {
 
     func deleteSwing(_ swing: SwingData) {
         swings.removeAll { $0.id == swing.id }
-        if let videoURL = swing.videoURL {
-            try? FileManager.default.removeItem(at: videoURL)
-        }
+        deleteVideoFile(at: swing.videoURL)
         saveSwings()
     }
 
     func deleteSwings(at offsets: IndexSet) {
         for index in offsets {
-            if let videoURL = swings[index].videoURL {
-                try? FileManager.default.removeItem(at: videoURL)
-            }
+            deleteVideoFile(at: swings[index].videoURL)
         }
         swings.remove(atOffsets: offsets)
         saveSwings()
+    }
+
+    private func deleteVideoFile(at url: URL?) {
+        guard let videoURL = url else { return }
+        do {
+            try FileManager.default.removeItem(at: videoURL)
+        } catch {
+            // Log the error - in production, consider reporting to analytics
+            print("Failed to delete video file at \(videoURL.path): \(error.localizedDescription)")
+        }
     }
 
     private func saveSwings() {

@@ -3,27 +3,72 @@ import AVFoundation
 import CoreImage
 import UIKit
 
+// MARK: - Analysis Constants
+enum AnalysisConstants {
+    static let minPoseConfidence: Float = 0.3
+    static let analysisFrameRate: Double = 15 // Reduced from 30 for better performance
+    static let shoulderLevelTolerance: CGFloat = 0.05
+    static let hipLevelTolerance: CGFloat = 0.05
+    static let hipOverAnkleTolerance: CGFloat = 0.1
+    static let shoulderOverHipTolerance: CGFloat = 0.15
+    static let minShoulderRotationGood: Double = 20
+    static let minShoulderRotationExcellent: Double = 30
+    static let hipRotationFollow: CGFloat = 0.05
+    static let minFramesRequired = 10
+    static let defaultPhaseScore = 70
+    static let basePhaseScore = 75
+}
+
+// MARK: - Analysis Errors
+enum SwingAnalysisError: LocalizedError {
+    case videoFileNotFound
+    case invalidVideoDuration
+    case insufficientPoseData
+    case analysisTimeout
+
+    var errorDescription: String? {
+        switch self {
+        case .videoFileNotFound:
+            return "Video file not found"
+        case .invalidVideoDuration:
+            return "Invalid video duration"
+        case .insufficientPoseData:
+            return "Could not detect enough pose data"
+        case .analysisTimeout:
+            return "Analysis took too long"
+        }
+    }
+}
+
 actor SwingAnalysisService {
-    private var poseRequest: VNDetectHumanBodyPoseRequest?
+    private lazy var poseRequest = VNDetectHumanBodyPoseRequest()
     private var framesPoses: [FramePose] = []
 
-    init() {
-        poseRequest = VNDetectHumanBodyPoseRequest()
-    }
+    func analyzeSwing(
+        videoURL: URL,
+        progressHandler: @escaping @MainActor @Sendable (Double) -> Void
+    ) async throws -> SwingAnalysis {
+        // Validate file exists
+        guard FileManager.default.fileExists(atPath: videoURL.path) else {
+            throw SwingAnalysisError.videoFileNotFound
+        }
 
-    func analyzeSwing(videoURL: URL, progressHandler: @escaping (Double) -> Void) async throws -> SwingAnalysis {
         framesPoses = []
 
         let asset = AVAsset(url: videoURL)
         let duration = try await asset.load(.duration)
         let durationSeconds = CMTimeGetSeconds(duration)
 
+        guard durationSeconds > 0 else {
+            throw SwingAnalysisError.invalidVideoDuration
+        }
+
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = .zero
         generator.requestedTimeToleranceAfter = .zero
 
-        let frameRate: Double = 30
+        let frameRate = AnalysisConstants.analysisFrameRate
         let totalFrames = Int(durationSeconds * frameRate)
 
         for frameIndex in 0..<totalFrames {
@@ -41,23 +86,26 @@ actor SwingAnalysisService {
                     framesPoses.append(framePose)
                 }
             } catch {
+                // Log but continue - some frames may fail
                 continue
             }
 
             let progress = Double(frameIndex + 1) / Double(totalFrames)
-            progressHandler(progress)
+            await progressHandler(progress)
+        }
+
+        guard framesPoses.count >= AnalysisConstants.minFramesRequired else {
+            throw SwingAnalysisError.insufficientPoseData
         }
 
         return generateAnalysis()
     }
 
     private func detectPose(in image: CIImage) async throws -> [PoseKeypoint]? {
-        guard let request = poseRequest else { return nil }
-
         let handler = VNImageRequestHandler(ciImage: image, options: [:])
-        try handler.perform([request])
+        try handler.perform([poseRequest])
 
-        guard let observation = request.results?.first else { return nil }
+        guard let observation = poseRequest.results?.first else { return nil }
 
         var keypoints: [PoseKeypoint] = []
 
@@ -72,7 +120,8 @@ actor SwingAnalysisService {
         ]
 
         for jointName in jointNames {
-            if let point = try? observation.recognizedPoint(jointName), point.confidence > 0.3 {
+            if let point = try? observation.recognizedPoint(jointName),
+               point.confidence > AnalysisConstants.minPoseConfidence {
                 let keypoint = PoseKeypoint(
                     name: jointName.rawValue.rawValue,
                     position: CGPoint(x: point.location.x, y: 1 - point.location.y),
@@ -108,52 +157,55 @@ actor SwingAnalysisService {
         )
     }
 
+    // MARK: - Helper for Keypoint Lookup
+    private func keypointMap(from pose: FramePose) -> [String: PoseKeypoint] {
+        Dictionary(uniqueKeysWithValues: pose.keypoints.map { ($0.name, $0) })
+    }
+
     private func analyzePhases() -> SwingPhases {
-        guard framesPoses.count > 10 else {
+        guard framesPoses.count > AnalysisConstants.minFramesRequired else {
             return SwingPhases(
-                addressScore: 70,
-                backswingScore: 70,
-                topScore: 70,
-                downswingScore: 70,
-                impactScore: 70,
-                followThroughScore: 70
+                addressScore: AnalysisConstants.defaultPhaseScore,
+                backswingScore: AnalysisConstants.defaultPhaseScore,
+                topScore: AnalysisConstants.defaultPhaseScore,
+                downswingScore: AnalysisConstants.defaultPhaseScore,
+                impactScore: AnalysisConstants.defaultPhaseScore,
+                followThroughScore: AnalysisConstants.defaultPhaseScore
             )
         }
 
-        let addressScore = analyzeAddress()
-        let backswingScore = analyzeBackswing()
-        let topScore = analyzeTopPosition()
-        let downswingScore = analyzeDownswing()
-        let impactScore = analyzeImpact()
-        let followThroughScore = analyzeFollowThrough()
-
         return SwingPhases(
-            addressScore: addressScore,
-            backswingScore: backswingScore,
-            topScore: topScore,
-            downswingScore: downswingScore,
-            impactScore: impactScore,
-            followThroughScore: followThroughScore
+            addressScore: analyzeAddress(),
+            backswingScore: analyzeBackswing(),
+            topScore: analyzeTopPosition(),
+            downswingScore: analyzeDownswing(),
+            impactScore: analyzeImpact(),
+            followThroughScore: analyzeFollowThrough()
         )
     }
 
     private func analyzeAddress() -> Int {
-        guard let firstPose = framesPoses.first else { return 70 }
+        guard let firstPose = framesPoses.first else {
+            return AnalysisConstants.defaultPhaseScore
+        }
 
-        var score = 75
+        let kp = keypointMap(from: firstPose)
+        var score = AnalysisConstants.basePhaseScore
 
-        if let leftShoulder = firstPose.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("left") }),
-           let rightShoulder = firstPose.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("right") }) {
+        // Check shoulder level
+        if let leftShoulder = kp["left_shoulder_1_joint"],
+           let rightShoulder = kp["right_shoulder_1_joint"] {
             let shoulderLevel = abs(leftShoulder.position.y - rightShoulder.position.y)
-            if shoulderLevel < 0.05 {
+            if shoulderLevel < AnalysisConstants.shoulderLevelTolerance {
                 score += 10
             }
         }
 
-        if let leftHip = firstPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("left") }),
-           let rightHip = firstPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("right") }) {
+        // Check hip level
+        if let leftHip = kp["left_upLeg_joint"],
+           let rightHip = kp["right_upLeg_joint"] {
             let hipLevel = abs(leftHip.position.y - rightHip.position.y)
-            if hipLevel < 0.05 {
+            if hipLevel < AnalysisConstants.hipLevelTolerance {
                 score += 10
             }
         }
@@ -163,24 +215,27 @@ actor SwingAnalysisService {
 
     private func analyzeBackswing() -> Int {
         let backswingFrames = framesPoses.prefix(framesPoses.count / 3)
-        guard backswingFrames.count > 3 else { return 70 }
+        guard backswingFrames.count > 3 else {
+            return AnalysisConstants.defaultPhaseScore
+        }
 
-        var score = 75
+        var score = AnalysisConstants.basePhaseScore
+        var maxShoulderRotation: Double = 0
 
-        var shoulderRotation: Double = 0
         for frame in backswingFrames {
-            if let leftShoulder = frame.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("left") }),
-               let rightShoulder = frame.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("right") }) {
+            let kp = keypointMap(from: frame)
+            if let leftShoulder = kp["left_shoulder_1_joint"],
+               let rightShoulder = kp["right_shoulder_1_joint"] {
                 let dx = rightShoulder.position.x - leftShoulder.position.x
                 let dy = rightShoulder.position.y - leftShoulder.position.y
-                let angle = atan2(dy, dx) * 180 / .pi
-                shoulderRotation = max(shoulderRotation, abs(angle))
+                let angle = abs(atan2(dy, dx) * 180 / .pi)
+                maxShoulderRotation = max(maxShoulderRotation, angle)
             }
         }
 
-        if shoulderRotation > 30 {
+        if maxShoulderRotation > AnalysisConstants.minShoulderRotationExcellent {
             score += 15
-        } else if shoulderRotation > 20 {
+        } else if maxShoulderRotation > AnalysisConstants.minShoulderRotationGood {
             score += 10
         }
 
@@ -189,13 +244,15 @@ actor SwingAnalysisService {
 
     private func analyzeTopPosition() -> Int {
         let topIndex = framesPoses.count / 3
-        guard topIndex < framesPoses.count else { return 70 }
+        guard topIndex < framesPoses.count else {
+            return AnalysisConstants.defaultPhaseScore
+        }
 
-        let topPose = framesPoses[topIndex]
-        var score = 75
+        let kp = keypointMap(from: framesPoses[topIndex])
+        var score = AnalysisConstants.basePhaseScore
 
-        if let leftWrist = topPose.keypoints.first(where: { $0.name.contains("wrist") && $0.name.contains("left") }),
-           let leftShoulder = topPose.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("left") }) {
+        if let leftWrist = kp["left_hand_joint"],
+           let leftShoulder = kp["left_shoulder_1_joint"] {
             if leftWrist.position.y < leftShoulder.position.y {
                 score += 15
             }
@@ -207,21 +264,29 @@ actor SwingAnalysisService {
     private func analyzeDownswing() -> Int {
         let startIndex = framesPoses.count / 3
         let endIndex = 2 * framesPoses.count / 3
-        guard startIndex < endIndex, endIndex < framesPoses.count else { return 70 }
+        guard startIndex < endIndex, endIndex < framesPoses.count else {
+            return AnalysisConstants.defaultPhaseScore
+        }
 
-        var score = 75
-
+        var score = AnalysisConstants.basePhaseScore
         let downswingFrames = Array(framesPoses[startIndex..<endIndex])
         var hipLeadsShoulders = 0
 
         for frame in downswingFrames {
-            if let leftHip = frame.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("left") }),
-               let rightHip = frame.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("right") }),
-               let leftShoulder = frame.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("left") }),
-               let rightShoulder = frame.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("right") }) {
+            let kp = keypointMap(from: frame)
+            if let leftHip = kp["left_upLeg_joint"],
+               let rightHip = kp["right_upLeg_joint"],
+               let leftShoulder = kp["left_shoulder_1_joint"],
+               let rightShoulder = kp["right_shoulder_1_joint"] {
 
-                let hipAngle = atan2(rightHip.position.y - leftHip.position.y, rightHip.position.x - leftHip.position.x)
-                let shoulderAngle = atan2(rightShoulder.position.y - leftShoulder.position.y, rightShoulder.position.x - leftShoulder.position.x)
+                let hipAngle = atan2(
+                    rightHip.position.y - leftHip.position.y,
+                    rightHip.position.x - leftHip.position.x
+                )
+                let shoulderAngle = atan2(
+                    rightShoulder.position.y - leftShoulder.position.y,
+                    rightShoulder.position.x - leftShoulder.position.x
+                )
 
                 if abs(hipAngle) > abs(shoulderAngle) {
                     hipLeadsShoulders += 1
@@ -238,21 +303,23 @@ actor SwingAnalysisService {
 
     private func analyzeImpact() -> Int {
         let impactIndex = 2 * framesPoses.count / 3
-        guard impactIndex < framesPoses.count else { return 70 }
+        guard impactIndex < framesPoses.count else {
+            return AnalysisConstants.defaultPhaseScore
+        }
 
-        let impactPose = framesPoses[impactIndex]
-        var score = 75
+        let kp = keypointMap(from: framesPoses[impactIndex])
+        var score = AnalysisConstants.basePhaseScore
 
-        if let leftHip = impactPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("left") }),
-           let leftShoulder = impactPose.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("left") }),
-           let leftAnkle = impactPose.keypoints.first(where: { $0.name.contains("ankle") && $0.name.contains("left") }) {
+        if let leftHip = kp["left_upLeg_joint"],
+           let leftShoulder = kp["left_shoulder_1_joint"],
+           let leftAnkle = kp["left_foot_joint"] {
 
-            let hipOverAnkle = abs(leftHip.position.x - leftAnkle.position.x) < 0.1
+            let hipOverAnkle = abs(leftHip.position.x - leftAnkle.position.x) < AnalysisConstants.hipOverAnkleTolerance
             if hipOverAnkle {
                 score += 10
             }
 
-            let shoulderOverHip = abs(leftShoulder.position.x - leftHip.position.x) < 0.15
+            let shoulderOverHip = abs(leftShoulder.position.x - leftHip.position.x) < AnalysisConstants.shoulderOverHipTolerance
             if shoulderOverHip {
                 score += 10
             }
@@ -263,15 +330,18 @@ actor SwingAnalysisService {
 
     private func analyzeFollowThrough() -> Int {
         let followThroughFrames = framesPoses.suffix(framesPoses.count / 4)
-        guard followThroughFrames.count > 2 else { return 70 }
+        guard followThroughFrames.count > 2 else {
+            return AnalysisConstants.defaultPhaseScore
+        }
 
-        var score = 75
+        var score = AnalysisConstants.basePhaseScore
 
         if let lastPose = followThroughFrames.last {
-            if let leftHip = lastPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("left") }),
-               let rightHip = lastPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("right") }) {
+            let kp = keypointMap(from: lastPose)
+            if let leftHip = kp["left_upLeg_joint"],
+               let rightHip = kp["right_upLeg_joint"] {
                 let hipRotation = rightHip.position.x - leftHip.position.x
-                if hipRotation > 0.05 {
+                if hipRotation > AnalysisConstants.hipRotationFollow {
                     score += 15
                 }
             }
@@ -288,28 +358,46 @@ actor SwingAnalysisService {
         if let firstPose = framesPoses.first,
            let midPose = framesPoses.count > 2 ? framesPoses[framesPoses.count / 3] : nil {
 
-            if let leftHip1 = firstPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("left") }),
-               let rightHip1 = firstPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("right") }),
-               let leftHip2 = midPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("left") }),
-               let rightHip2 = midPose.keypoints.first(where: { $0.name.contains("hip") && $0.name.contains("right") }) {
+            let kp1 = keypointMap(from: firstPose)
+            let kp2 = keypointMap(from: midPose)
 
-                let angle1 = atan2(rightHip1.position.y - leftHip1.position.y, rightHip1.position.x - leftHip1.position.x)
-                let angle2 = atan2(rightHip2.position.y - leftHip2.position.y, rightHip2.position.x - leftHip2.position.x)
+            // Calculate hip rotation
+            if let leftHip1 = kp1["left_upLeg_joint"],
+               let rightHip1 = kp1["right_upLeg_joint"],
+               let leftHip2 = kp2["left_upLeg_joint"],
+               let rightHip2 = kp2["right_upLeg_joint"] {
+
+                let angle1 = atan2(
+                    rightHip1.position.y - leftHip1.position.y,
+                    rightHip1.position.x - leftHip1.position.x
+                )
+                let angle2 = atan2(
+                    rightHip2.position.y - leftHip2.position.y,
+                    rightHip2.position.x - leftHip2.position.x
+                )
                 hipRotation = abs(angle2 - angle1) * 180 / .pi
             }
 
-            if let leftShoulder1 = firstPose.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("left") }),
-               let rightShoulder1 = firstPose.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("right") }),
-               let leftShoulder2 = midPose.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("left") }),
-               let rightShoulder2 = midPose.keypoints.first(where: { $0.name.contains("shoulder") && $0.name.contains("right") }) {
+            // Calculate shoulder rotation
+            if let leftShoulder1 = kp1["left_shoulder_1_joint"],
+               let rightShoulder1 = kp1["right_shoulder_1_joint"],
+               let leftShoulder2 = kp2["left_shoulder_1_joint"],
+               let rightShoulder2 = kp2["right_shoulder_1_joint"] {
 
-                let angle1 = atan2(rightShoulder1.position.y - leftShoulder1.position.y, rightShoulder1.position.x - leftShoulder1.position.x)
-                let angle2 = atan2(rightShoulder2.position.y - leftShoulder2.position.y, rightShoulder2.position.x - leftShoulder2.position.x)
+                let angle1 = atan2(
+                    rightShoulder1.position.y - leftShoulder1.position.y,
+                    rightShoulder1.position.x - leftShoulder1.position.x
+                )
+                let angle2 = atan2(
+                    rightShoulder2.position.y - leftShoulder2.position.y,
+                    rightShoulder2.position.x - leftShoulder2.position.x
+                )
                 shoulderRotation = abs(angle2 - angle1) * 180 / .pi
             }
 
-            if let hip = firstPose.keypoints.first(where: { $0.name.contains("hip") }),
-               let shoulder = firstPose.keypoints.first(where: { $0.name.contains("shoulder") }) {
+            // Calculate spine angle
+            if let hip = kp1["left_upLeg_joint"],
+               let shoulder = kp1["left_shoulder_1_joint"] {
                 let dx = shoulder.position.x - hip.position.x
                 let dy = shoulder.position.y - hip.position.y
                 spineAngle = abs(atan2(dx, dy) * 180 / .pi)
@@ -340,6 +428,7 @@ actor SwingAnalysisService {
     private func generateFeedback(phases: SwingPhases, metrics: SwingMetrics) -> [SwingFeedback] {
         var feedback: [SwingFeedback] = []
 
+        // Address feedback
         if phases.addressScore >= 85 {
             feedback.append(SwingFeedback(
                 category: .posture,
@@ -358,6 +447,7 @@ actor SwingAnalysisService {
             ))
         }
 
+        // Backswing feedback
         if phases.backswingScore >= 85 {
             feedback.append(SwingFeedback(
                 category: .backswing,
@@ -376,6 +466,7 @@ actor SwingAnalysisService {
             ))
         }
 
+        // Downswing feedback
         if phases.downswingScore >= 85 {
             feedback.append(SwingFeedback(
                 category: .downswing,
@@ -394,6 +485,7 @@ actor SwingAnalysisService {
             ))
         }
 
+        // Tempo feedback
         if metrics.tempo < 2.5 || metrics.tempo > 4.0 {
             feedback.append(SwingFeedback(
                 category: .tempo,
@@ -412,6 +504,7 @@ actor SwingAnalysisService {
             ))
         }
 
+        // Balance feedback
         if metrics.balance == .poor || metrics.balance == .fair {
             feedback.append(SwingFeedback(
                 category: .balance,
@@ -422,6 +515,7 @@ actor SwingAnalysisService {
             ))
         }
 
+        // Impact feedback
         if phases.impactScore >= 85 {
             feedback.append(SwingFeedback(
                 category: .impact,
@@ -432,6 +526,7 @@ actor SwingAnalysisService {
             ))
         }
 
+        // Follow through feedback
         if phases.followThroughScore < 70 {
             feedback.append(SwingFeedback(
                 category: .followThrough,

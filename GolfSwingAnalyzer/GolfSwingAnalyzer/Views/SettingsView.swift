@@ -7,6 +7,14 @@ struct SettingsView: View {
     @AppStorage("hapticFeedback") private var hapticFeedback = true
     @AppStorage("showGuideLines") private var showGuideLines = true
 
+    // Static URL constants - safe to force unwrap known valid URLs
+    private enum URLs {
+        static let privacy = URL(string: "https://example.com/privacy")!
+        static let terms = URL(string: "https://example.com/terms")!
+        static let support = URL(string: "mailto:support@example.com")!
+        static let faq = URL(string: "https://example.com/faq")!
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -41,7 +49,7 @@ struct SettingsView: View {
                             .foregroundColor(.secondary)
                     }
 
-                    Link(destination: URL(string: "https://example.com/privacy")!) {
+                    Link(destination: URLs.privacy) {
                         HStack {
                             Text("Privacy Policy")
                             Spacer()
@@ -51,7 +59,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    Link(destination: URL(string: "https://example.com/terms")!) {
+                    Link(destination: URLs.terms) {
                         HStack {
                             Text("Terms of Service")
                             Spacer()
@@ -63,7 +71,7 @@ struct SettingsView: View {
                 }
 
                 Section("Support") {
-                    Link(destination: URL(string: "mailto:support@example.com")!) {
+                    Link(destination: URLs.support) {
                         HStack {
                             Image(systemName: "envelope")
                                 .foregroundColor(.green)
@@ -71,7 +79,7 @@ struct SettingsView: View {
                         }
                     }
 
-                    Link(destination: URL(string: "https://example.com/faq")!) {
+                    Link(destination: URLs.faq) {
                         HStack {
                             Image(systemName: "questionmark.circle")
                                 .foregroundColor(.green)

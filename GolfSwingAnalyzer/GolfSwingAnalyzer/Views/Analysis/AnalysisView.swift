@@ -4,12 +4,18 @@ import AVKit
 struct AnalysisView: View {
     @EnvironmentObject var swingStore: SwingStore
     @Environment(\.dismiss) var dismiss
-    @State var swing: SwingData
+    @State private var swing: SwingData
     @State private var isAnalyzing = false
     @State private var analysisProgress: Double = 0
     @State private var selectedTab = 0
+    @State private var analysisError: Error?
+    @State private var showErrorAlert = false
 
     private let analysisService = SwingAnalysisService()
+
+    init(swing: SwingData) {
+        _swing = State(initialValue: swing)
+    }
 
     var body: some View {
         NavigationStack {
@@ -79,6 +85,11 @@ struct AnalysisView: View {
                     }
                 }
             }
+            .alert("Analysis Failed", isPresented: $showErrorAlert, presenting: analysisError) { _ in
+                Button("OK", role: .cancel) {}
+            } message: { error in
+                Text(error.localizedDescription)
+            }
         }
     }
 
@@ -86,18 +97,21 @@ struct AnalysisView: View {
         guard let videoURL = swing.videoURL else { return }
 
         isAnalyzing = true
+        analysisError = nil
 
-        Task {
-            let analysis = try await analysisService.analyzeSwing(videoURL: videoURL) { progress in
-                Task { @MainActor in
+        Task { [weak swingStore] in
+            do {
+                let analysis = try await analysisService.analyzeSwing(videoURL: videoURL) { progress in
                     analysisProgress = progress
                 }
-            }
 
-            await MainActor.run {
                 swing.analysis = analysis
-                swingStore.updateSwing(swing)
+                swingStore?.updateSwing(swing)
                 isAnalyzing = false
+            } catch {
+                isAnalyzing = false
+                analysisError = error
+                showErrorAlert = true
             }
         }
     }
@@ -134,6 +148,8 @@ struct VideoPlayerView: View {
             }
             .onDisappear {
                 player?.pause()
+                player?.replaceCurrentItem(with: nil)
+                player = nil
             }
     }
 }
@@ -190,7 +206,7 @@ struct ScoreCard: View {
 
                     Circle()
                         .trim(from: 0, to: Double(analysis.overallScore) / 100)
-                        .stroke(scoreColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                        .stroke(ScoreColorHelper.color(for: analysis.overallScore), style: StrokeStyle(lineWidth: 8, lineCap: .round))
                         .frame(width: 80, height: 80)
                         .rotationEffect(.degrees(-90))
 
@@ -204,14 +220,25 @@ struct ScoreCard: View {
         .background(Color(.systemGray6))
         .cornerRadius(16)
     }
+}
 
-    var scoreColor: Color {
-        switch analysis.overallScore {
+// MARK: - Consolidated Score Color Helper
+enum ScoreColorHelper {
+    static func color(for score: Int) -> Color {
+        switch score {
         case 90...100: return .green
         case 80..<90: return .blue
         case 70..<80: return .yellow
         case 60..<70: return .orange
         default: return .red
+        }
+    }
+
+    static func phaseColor(for score: Int) -> Color {
+        switch score {
+        case 85...100: return .green
+        case 70..<85: return .yellow
+        default: return .orange
         }
     }
 }
@@ -237,6 +264,10 @@ struct PhaseRow: View {
     let score: Int
     let icon: String
 
+    private var scoreColor: Color {
+        ScoreColorHelper.phaseColor(for: score)
+    }
+
     var body: some View {
         HStack {
             Image(systemName: icon)
@@ -258,14 +289,6 @@ struct PhaseRow: View {
         .padding()
         .background(Color(.systemGray6))
         .cornerRadius(12)
-    }
-
-    var scoreColor: Color {
-        switch score {
-        case 85...100: return .green
-        case 70..<85: return .yellow
-        default: return .orange
-        }
     }
 }
 

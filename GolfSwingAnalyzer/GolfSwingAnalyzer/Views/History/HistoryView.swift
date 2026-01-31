@@ -144,6 +144,14 @@ struct StatBox: View {
 struct SwingHistoryRow: View {
     let swing: SwingData
 
+    // Static DateFormatter for performance - created once, reused
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
     var body: some View {
         HStack(spacing: 16) {
             ZStack {
@@ -192,28 +200,18 @@ struct SwingHistoryRow: View {
         .padding(.vertical, 4)
     }
 
-    var scoreBackgroundColor: Color {
+    private var scoreBackgroundColor: Color {
         guard let score = swing.analysis?.overallScore else {
             return .gray
         }
-
-        switch score {
-        case 90...100: return .green
-        case 80..<90: return .blue
-        case 70..<80: return .yellow
-        case 60..<70: return .orange
-        default: return .red
-        }
+        return ScoreColorHelper.color(for: score)
     }
 
-    var formattedDate: String {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter.string(from: swing.recordedAt)
+    private var formattedDate: String {
+        Self.dateFormatter.string(from: swing.recordedAt)
     }
 
-    var formattedDuration: String {
+    private var formattedDuration: String {
         let seconds = Int(swing.duration)
         return "\(seconds)s"
     }
