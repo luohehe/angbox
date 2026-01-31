@@ -4,69 +4,93 @@ This file provides guidance for AI assistants working with this repository.
 
 ## Project Overview
 
-**angbox** is a personal playground repository for experimentation and testing. It currently serves as an open canvas for various coding experiments.
+**angbox** is a personal playground repository for experimentation and testing. It contains the following projects:
+
+### GolfSwingAnalyzer
+An iOS app that helps golfers record, analyze, and improve their swings using AI-powered pose detection with Apple's Vision framework.
 
 ## Repository Structure
 
 ```
 angbox/
-├── README.md          # Project description
-└── CLAUDE.md          # AI assistant guidance (this file)
+├── README.md                      # Repository description
+├── CLAUDE.md                      # AI assistant guidance (this file)
+└── GolfSwingAnalyzer/             # iOS Golf Swing Analysis App
+    ├── README.md                  # Project documentation
+    └── GolfSwingAnalyzer/
+        ├── GolfSwingAnalyzerApp.swift    # App entry point
+        ├── ContentView.swift              # Main tab view
+        ├── Info.plist                     # App configuration
+        ├── Assets.xcassets/               # App icons and colors
+        ├── Models/
+        │   ├── SwingData.swift            # Data models
+        │   └── SwingStore.swift           # State management
+        ├── Services/
+        │   ├── CameraService.swift        # Video recording
+        │   └── SwingAnalysisService.swift # AI analysis
+        └── Views/
+            ├── Recording/RecordingView.swift
+            ├── Analysis/AnalysisView.swift
+            ├── History/HistoryView.swift
+            └── SettingsView.swift
 ```
 
-## Current State
+## Projects
 
-This repository is minimal by design - it's a playground for experimentation. There are currently:
-- No source code files
-- No build system configured
-- No dependencies or package management
-- No CI/CD pipelines
+### GolfSwingAnalyzer (iOS)
+
+**Language:** Swift 5.9+ with SwiftUI
+**Platform:** iOS 17.0+
+**Frameworks:** AVFoundation, Vision, AVKit
+
+#### Key Features
+- Video recording of golf swings
+- AI-powered pose detection and analysis
+- Swing phase scoring (address, backswing, top, downswing, impact, follow-through)
+- Detailed metrics (hip/shoulder rotation, tempo, swing plane, balance)
+- Actionable feedback and improvement suggestions
+- Swing history with progress tracking
+
+#### Architecture
+- **MVVM pattern** with SwiftUI
+- **Models**: `SwingData`, `SwingAnalysis`, `SwingPhases`, `SwingMetrics`, `SwingFeedback`
+- **Services**: `CameraService` (AVFoundation), `SwingAnalysisService` (Vision framework)
+- **Views**: Tab-based navigation (Record, History, Settings)
+
+#### Commands
+```bash
+# Open in Xcode
+open GolfSwingAnalyzer.xcodeproj
+
+# Build from command line (after creating Xcode project)
+xcodebuild -scheme GolfSwingAnalyzer -destination 'platform=iOS Simulator,name=iPhone 15'
+```
+
+#### Setup Instructions
+1. Open Xcode and create new iOS App project named "GolfSwingAnalyzer"
+2. Copy all Swift files from `GolfSwingAnalyzer/GolfSwingAnalyzer/` into the project
+3. Add `Assets.xcassets` contents
+4. Update `Info.plist` with camera/microphone usage descriptions
+5. Build and run on physical device (camera required)
 
 ## Development Guidelines
 
-When adding new experiments or code to this repository:
-
 ### General Conventions
-- Keep experiments self-contained when possible
+- Keep experiments self-contained in dedicated directories
+- Include a README for each project
 - Document any new tools or frameworks added
-- Use descriptive names for files and directories
 
 ### Git Workflow
 - Create feature branches for new experiments
 - Write clear commit messages describing changes
 - The main branch should remain stable
 
-### Adding New Projects
-
-When adding a new project/experiment:
-1. Create a dedicated directory if the experiment has multiple files
-2. Include a README or comments explaining the experiment's purpose
-3. Update this CLAUDE.md if new build tools or conventions are introduced
-
-## Commands
-
-Currently no build commands are configured. When projects are added, document their commands here:
-
-```bash
-# Placeholder for future build commands
-# npm install / npm run build
-# python -m pip install -r requirements.txt
-# make build
-```
-
-## Testing
-
-No testing framework is currently configured. When tests are added:
-- Document the testing framework used
-- Include instructions for running tests
-- Note any test coverage requirements
-
-## Dependencies
-
-No dependencies are currently managed. When package management is added:
-- Document the package manager (npm, pip, cargo, etc.)
-- Keep dependency files (package.json, requirements.txt, etc.) up to date
-- Note any system-level dependencies required
+### Swift/iOS Conventions (for GolfSwingAnalyzer)
+- Use SwiftUI for all UI components
+- Follow MVVM architecture pattern
+- Use `@MainActor` for UI-bound classes
+- Use Swift concurrency (`async/await`) for asynchronous operations
+- Keep Views focused; extract components when complexity grows
 
 ## Notes for AI Assistants
 
@@ -74,4 +98,5 @@ No dependencies are currently managed. When package management is added:
 - When adding code, follow best practices for the language being used
 - Keep changes focused and well-documented
 - If introducing new tools or frameworks, update this file accordingly
-- Be mindful that experiments here may be temporary or incomplete
+- For iOS projects, ensure proper permission descriptions in Info.plist
+- Test on physical devices when camera/sensors are involved
