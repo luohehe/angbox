@@ -1,19 +1,100 @@
 import Foundation
 import CoreGraphics
 
+// MARK: - Club Types
+enum ClubType: String, Codable, CaseIterable, Identifiable {
+    case driver = "Driver"
+    case wood3 = "3 Wood"
+    case wood5 = "5 Wood"
+    case hybrid = "Hybrid"
+    case iron3 = "3 Iron"
+    case iron4 = "4 Iron"
+    case iron5 = "5 Iron"
+    case iron6 = "6 Iron"
+    case iron7 = "7 Iron"
+    case iron8 = "8 Iron"
+    case iron9 = "9 Iron"
+    case pitchingWedge = "PW"
+    case gapWedge = "GW"
+    case sandWedge = "SW"
+    case lobWedge = "LW"
+    case putter = "Putter"
+
+    var id: String { rawValue }
+
+    var category: ClubCategory {
+        switch self {
+        case .driver:
+            return .driver
+        case .wood3, .wood5:
+            return .fairwayWood
+        case .hybrid:
+            return .hybrid
+        case .iron3, .iron4, .iron5, .iron6, .iron7, .iron8, .iron9:
+            return .iron
+        case .pitchingWedge, .gapWedge, .sandWedge, .lobWedge:
+            return .wedge
+        case .putter:
+            return .putter
+        }
+    }
+
+    var icon: String {
+        switch category {
+        case .driver: return "figure.golf"
+        case .fairwayWood: return "leaf.fill"
+        case .hybrid: return "arrow.up.right"
+        case .iron: return "lineweight"
+        case .wedge: return "arrow.up.forward"
+        case .putter: return "arrow.down"
+        }
+    }
+
+    var displayName: String { rawValue }
+}
+
+enum ClubCategory: String, Codable, CaseIterable {
+    case driver = "Driver"
+    case fairwayWood = "Fairway Wood"
+    case hybrid = "Hybrid"
+    case iron = "Iron"
+    case wedge = "Wedge"
+    case putter = "Putter"
+
+    var clubs: [ClubType] {
+        ClubType.allCases.filter { $0.category == self }
+    }
+}
+
+// MARK: - Swing Data
 struct SwingData: Identifiable, Codable {
     let id: UUID
     let recordedAt: Date
     let videoURL: URL?
     let duration: TimeInterval
+    let clubType: ClubType
     var analysis: SwingAnalysis?
+    var cloudSynced: Bool
+    var userId: String?
 
-    init(id: UUID = UUID(), recordedAt: Date = Date(), videoURL: URL? = nil, duration: TimeInterval = 0, analysis: SwingAnalysis? = nil) {
+    init(
+        id: UUID = UUID(),
+        recordedAt: Date = Date(),
+        videoURL: URL? = nil,
+        duration: TimeInterval = 0,
+        clubType: ClubType = .iron7,
+        analysis: SwingAnalysis? = nil,
+        cloudSynced: Bool = false,
+        userId: String? = nil
+    ) {
         self.id = id
         self.recordedAt = recordedAt
         self.videoURL = videoURL
         self.duration = duration
+        self.clubType = clubType
         self.analysis = analysis
+        self.cloudSynced = cloudSynced
+        self.userId = userId
     }
 }
 

@@ -9,6 +9,8 @@ struct RecordingView: View {
     @State private var permissionGranted = false
     @State private var showPermissionAlert = false
     @State private var showGuideOverlay = true
+    @State private var selectedClub: ClubType = .iron7
+    @State private var showClubSelector = false
 
     var body: some View {
         NavigationStack {
@@ -32,6 +34,16 @@ struct RecordingView: View {
                         )
 
                         Spacer()
+
+                        // Club Selector (above recording controls)
+                        if !cameraService.isRecording {
+                            ClubSelectorButton(
+                                selectedClub: selectedClub,
+                                onTap: { showClubSelector = true }
+                            )
+                            .padding(.bottom, AppSpacing.md)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
 
                         // Recording Status
                         if cameraService.isRecording {
@@ -75,7 +87,11 @@ struct RecordingView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
             .onChange(of: cameraService.recordedVideoURL) { _, newURL in
                 if let url = newURL {
-                    let swing = SwingData(videoURL: url, duration: cameraService.recordingDuration)
+                    let swing = SwingData(
+                        videoURL: url,
+                        duration: cameraService.recordingDuration,
+                        clubType: selectedClub
+                    )
                     currentSwing = swing
                     swingStore.addSwing(swing)
                     showAnalysis = true
@@ -86,6 +102,11 @@ struct RecordingView: View {
                     AnalysisView(swing: swing)
                         .environmentObject(swingStore)
                 }
+            }
+            .sheet(isPresented: $showClubSelector) {
+                ClubSelectorSheet(selectedClub: $selectedClub)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
             }
             .alert("Camera Permission Required", isPresented: $showPermissionAlert) {
                 Button("Open Settings") {
@@ -433,7 +454,145 @@ struct CameraPermissionView: View {
     }
 }
 
+// MARK: - Club Selector Button
+struct ClubSelectorButton: View {
+    let selectedClub: ClubType
+    let onTap: () -> Void
+
+    var body: some View {
+        Button(action: onTap) {
+            HStack(spacing: AppSpacing.sm) {
+                Image(systemName: selectedClub.icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.neverOBGreen)
+
+                Text(selectedClub.displayName)
+                    .font(AppTypography.headline)
+                    .foregroundColor(.white)
+
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white.opacity(0.7))
+            }
+            .padding(.horizontal, AppSpacing.md)
+            .padding(.vertical, AppSpacing.sm)
+            .background(.ultraThinMaterial)
+            .cornerRadius(AppCornerRadius.circular)
+        }
+    }
+}
+
+// MARK: - Club Selector Sheet
+struct ClubSelectorSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @Binding var selectedClub: ClubType
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: AppSpacing.lg) {
+                    ForEach(ClubCategory.allCases, id: \.self) { category in
+                        ClubCategorySection(
+                            category: category,
+                            selectedClub: $selectedClub,
+                            onSelect: { dismiss() }
+                        )
+                    }
+                }
+                .padding(AppSpacing.md)
+            }
+            .background(Color.backgroundPrimary)
+            .navigationTitle("Select Club")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") { dismiss() }
+                        .foregroundColor(.neverOBGreen)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Club Category Section
+struct ClubCategorySection: View {
+    let category: ClubCategory
+    @Binding var selectedClub: ClubType
+    let onSelect: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AppSpacing.sm) {
+            Text(category.rawValue)
+                .font(AppTypography.caption1)
+                .foregroundColor(.secondary)
+                .padding(.horizontal, AppSpacing.xs)
+
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible()),
+                    GridItem(.flexible()),
+                    GridItem(.flexible())
+                ],
+                spacing: AppSpacing.sm
+            ) {
+                ForEach(category.clubs) { club in
+                    ClubOptionButton(
+                        club: club,
+                        isSelected: selectedClub == club,
+                        onSelect: {
+                            selectedClub = club
+                            onSelect()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Club Option Button
+struct ClubOptionButton: View {
+    let club: ClubType
+    let isSelected: Bool
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button(action: onSelect) {
+            VStack(spacing: AppSpacing.xs) {
+                Image(systemName: club.icon)
+                    .font(.system(size: 24, weight: .medium))
+                    .foregroundColor(isSelected ? .white : .neverOBGreen)
+
+                Text(club.displayName)
+                    .font(AppTypography.caption1)
+                    .foregroundColor(isSelected ? .white : .primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AppSpacing.md)
+            .background(
+                isSelected
+                    ? Color.neverOBGreen
+                    : Color.cardBackground
+            )
+            .cornerRadius(AppCornerRadius.medium)
+            .overlay(
+                RoundedRectangle(cornerRadius: AppCornerRadius.medium)
+                    .stroke(
+                        isSelected ? Color.neverOBGreen : Color.clear,
+                        lineWidth: 2
+                    )
+            )
+        }
+    }
+}
+
 #Preview {
     RecordingView()
         .environmentObject(SwingStore())
+}
+
+#Preview("Club Selector") {
+    ClubSelectorSheet(selectedClub: .constant(.iron7))
 }
