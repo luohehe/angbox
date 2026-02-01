@@ -274,6 +274,136 @@ final class SwingDataTests: XCTestCase {
         XCTAssertEqual(framePose.keypoints.count, 2)
     }
 
+    // MARK: - ClubType Tests
+
+    func testClubTypeAllCases() {
+        // Verify all 16 club types exist
+        XCTAssertEqual(ClubType.allCases.count, 16)
+    }
+
+    func testClubTypeRawValues() {
+        XCTAssertEqual(ClubType.driver.rawValue, "Driver")
+        XCTAssertEqual(ClubType.wood3.rawValue, "3 Wood")
+        XCTAssertEqual(ClubType.wood5.rawValue, "5 Wood")
+        XCTAssertEqual(ClubType.hybrid.rawValue, "Hybrid")
+        XCTAssertEqual(ClubType.iron7.rawValue, "7 Iron")
+        XCTAssertEqual(ClubType.pitchingWedge.rawValue, "PW")
+        XCTAssertEqual(ClubType.sandWedge.rawValue, "SW")
+        XCTAssertEqual(ClubType.putter.rawValue, "Putter")
+    }
+
+    func testClubTypeCategories() {
+        XCTAssertEqual(ClubType.driver.category, .driver)
+        XCTAssertEqual(ClubType.wood3.category, .fairwayWood)
+        XCTAssertEqual(ClubType.wood5.category, .fairwayWood)
+        XCTAssertEqual(ClubType.hybrid.category, .hybrid)
+        XCTAssertEqual(ClubType.iron3.category, .iron)
+        XCTAssertEqual(ClubType.iron7.category, .iron)
+        XCTAssertEqual(ClubType.pitchingWedge.category, .wedge)
+        XCTAssertEqual(ClubType.sandWedge.category, .wedge)
+        XCTAssertEqual(ClubType.putter.category, .putter)
+    }
+
+    func testClubTypeIcons() {
+        // Each category should have an icon
+        XCTAssertFalse(ClubType.driver.icon.isEmpty)
+        XCTAssertFalse(ClubType.wood3.icon.isEmpty)
+        XCTAssertFalse(ClubType.hybrid.icon.isEmpty)
+        XCTAssertFalse(ClubType.iron7.icon.isEmpty)
+        XCTAssertFalse(ClubType.sandWedge.icon.isEmpty)
+        XCTAssertFalse(ClubType.putter.icon.isEmpty)
+    }
+
+    func testClubTypeDisplayName() {
+        XCTAssertEqual(ClubType.driver.displayName, "Driver")
+        XCTAssertEqual(ClubType.iron7.displayName, "7 Iron")
+        XCTAssertEqual(ClubType.pitchingWedge.displayName, "PW")
+    }
+
+    func testClubTypeCodable() throws {
+        let clubType = ClubType.iron7
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(clubType)
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(ClubType.self, from: data)
+
+        XCTAssertEqual(decoded, clubType)
+    }
+
+    func testClubTypeIdentifiable() {
+        XCTAssertEqual(ClubType.driver.id, "Driver")
+        XCTAssertEqual(ClubType.iron7.id, "7 Iron")
+    }
+
+    // MARK: - ClubCategory Tests
+
+    func testClubCategoryAllCases() {
+        XCTAssertEqual(ClubCategory.allCases.count, 6)
+    }
+
+    func testClubCategoryRawValues() {
+        XCTAssertEqual(ClubCategory.driver.rawValue, "Driver")
+        XCTAssertEqual(ClubCategory.fairwayWood.rawValue, "Fairway Wood")
+        XCTAssertEqual(ClubCategory.hybrid.rawValue, "Hybrid")
+        XCTAssertEqual(ClubCategory.iron.rawValue, "Iron")
+        XCTAssertEqual(ClubCategory.wedge.rawValue, "Wedge")
+        XCTAssertEqual(ClubCategory.putter.rawValue, "Putter")
+    }
+
+    func testClubCategoryClubs() {
+        // Driver category should have 1 club
+        XCTAssertEqual(ClubCategory.driver.clubs.count, 1)
+        XCTAssertTrue(ClubCategory.driver.clubs.contains(.driver))
+
+        // Fairway wood category should have 2 clubs
+        XCTAssertEqual(ClubCategory.fairwayWood.clubs.count, 2)
+        XCTAssertTrue(ClubCategory.fairwayWood.clubs.contains(.wood3))
+        XCTAssertTrue(ClubCategory.fairwayWood.clubs.contains(.wood5))
+
+        // Iron category should have 7 clubs (3-9)
+        XCTAssertEqual(ClubCategory.iron.clubs.count, 7)
+
+        // Wedge category should have 4 clubs
+        XCTAssertEqual(ClubCategory.wedge.clubs.count, 4)
+    }
+
+    // MARK: - SwingData with ClubType Tests
+
+    func testSwingDataDefaultClubType() {
+        let swing = SwingData()
+        XCTAssertEqual(swing.clubType, .iron7)
+    }
+
+    func testSwingDataWithClubType() {
+        let swing = SwingData(clubType: .driver)
+        XCTAssertEqual(swing.clubType, .driver)
+    }
+
+    func testSwingDataClubTypeCodable() throws {
+        let originalSwing = SwingData(
+            videoURL: URL(fileURLWithPath: "/tmp/test.mov"),
+            duration: 3.5,
+            clubType: .sandWedge
+        )
+
+        let encoder = JSONEncoder()
+        let data = try encoder.encode(originalSwing)
+
+        let decoder = JSONDecoder()
+        let decodedSwing = try decoder.decode(SwingData.self, from: data)
+
+        XCTAssertEqual(decodedSwing.clubType, .sandWedge)
+    }
+
+    func testSwingDataCloudSyncProperties() {
+        let swing = SwingData(cloudSynced: true, userId: "user123")
+
+        XCTAssertTrue(swing.cloudSynced)
+        XCTAssertEqual(swing.userId, "user123")
+    }
+
     // MARK: - Helper Methods
 
     private func createDefaultPhases() -> SwingPhases {
