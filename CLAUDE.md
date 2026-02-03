@@ -18,29 +18,42 @@ angbox/
 ├── .github/
 │   └── workflows/
 │       └── ios-ci.yml             # CI/CD pipeline
-└── GolfSwingAnalyzer/             # iOS Golf Swing Analysis App
+└── GolfSwingAnalyzer/             # iOS Golf Swing Analysis App (NeverOB)
     ├── README.md                  # Project documentation
+    ├── LOGO_DESIGN.md             # Logo design specification
     ├── .swiftlint.yml             # SwiftLint configuration
     ├── GolfSwingAnalyzer/
     │   ├── GolfSwingAnalyzerApp.swift    # App entry point
-    │   ├── ContentView.swift              # Main tab view
+    │   ├── ContentView.swift              # Main tab view with Social tab
     │   ├── Info.plist                     # App configuration
     │   ├── Assets.xcassets/               # App icons and colors
     │   ├── Models/
-    │   │   ├── SwingData.swift            # Data models
-    │   │   └── SwingStore.swift           # State management
+    │   │   ├── SwingData.swift            # Data models + ClubType
+    │   │   ├── SwingStore.swift           # State management
+    │   │   └── SocialModels.swift         # User, Friendship, Leaderboard
     │   ├── Services/
     │   │   ├── CameraService.swift        # Video recording
-    │   │   └── SwingAnalysisService.swift # AI analysis
+    │   │   ├── SwingAnalysisService.swift # AI analysis
+    │   │   ├── CloudService.swift         # Cloud sync service
+    │   │   └── SocialService.swift        # Friend & leaderboard service
+    │   ├── Theme/
+    │   │   ├── DesignSystem.swift         # Colors, typography, components
+    │   │   └── NeverOBLogo.swift          # Logo components
     │   └── Views/
-    │       ├── Recording/RecordingView.swift
+    │       ├── Recording/RecordingView.swift  # Camera + club selection
     │       ├── Analysis/AnalysisView.swift
-    │       ├── History/HistoryView.swift
+    │       ├── History/HistoryView.swift      # Dashboard
+    │       ├── Social/
+    │       │   ├── LeaderboardView.swift      # Global/friends rankings
+    │       │   └── FriendsView.swift          # Friend management
     │       └── SettingsView.swift
     └── GolfSwingAnalyzerTests/
-        ├── SwingDataTests.swift           # Model unit tests
+        ├── SwingDataTests.swift           # Model + ClubType unit tests
         ├── SwingStoreTests.swift          # Store unit tests
-        └── SwingAnalysisServiceTests.swift # Service unit tests
+        ├── SwingAnalysisServiceTests.swift # Service unit tests
+        ├── SocialModelsTests.swift        # Social models unit tests
+        ├── CloudServiceTests.swift        # Cloud service unit tests
+        └── SocialServiceTests.swift       # Social service unit tests
 ```
 
 ## Projects
@@ -52,18 +65,23 @@ angbox/
 **Frameworks:** AVFoundation, Vision, AVKit
 
 #### Key Features
-- Video recording of golf swings
-- AI-powered pose detection and analysis
+- Video recording of golf swings with club type selection
+- AI-powered pose detection and analysis using Vision framework
 - Swing phase scoring (address, backswing, top, downswing, impact, follow-through)
 - Detailed metrics (hip/shoulder rotation, tempo, swing plane, balance)
 - Actionable feedback and improvement suggestions
-- Swing history with progress tracking
+- Swing history with progress tracking and dashboard
+- Club-specific statistics (Driver, Woods, Irons, Wedges, Putter)
+- Cloud sync for storing results
+- Friend system with friend requests
+- Leaderboards (Global and Friends rankings)
+- Professional UI/UX with NeverOB branding
 
 #### Architecture
 - **MVVM pattern** with SwiftUI
-- **Models**: `SwingData`, `SwingAnalysis`, `SwingPhases`, `SwingMetrics`, `SwingFeedback`
-- **Services**: `CameraService` (AVFoundation), `SwingAnalysisService` (Vision framework)
-- **Views**: Tab-based navigation (Record, History, Settings)
+- **Models**: `SwingData`, `SwingAnalysis`, `ClubType`, `User`, `Friendship`, `LeaderboardEntry`
+- **Services**: `CameraService`, `SwingAnalysisService`, `CloudService`, `SocialService`
+- **Views**: Tab-based navigation (Record, Dashboard, Social, Settings)
 
 #### Commands
 ```bash
@@ -102,9 +120,12 @@ The project includes comprehensive unit tests in `GolfSwingAnalyzerTests/`:
 
 | Test File | Coverage |
 |-----------|----------|
-| `SwingDataTests.swift` | Model structs, Codable conformance, score grades/colors |
+| `SwingDataTests.swift` | Model structs, ClubType, ClubCategory, Codable conformance, score grades/colors |
 | `SwingStoreTests.swift` | CRUD operations, persistence, statistics calculations |
 | `SwingAnalysisServiceTests.swift` | Constants, error types, ScoreColorHelper |
+| `SocialModelsTests.swift` | User, UserStats, Friendship, FriendRequest, LeaderboardEntry, SyncStatus |
+| `CloudServiceTests.swift` | Upload, fetch, sync operations, UserSession management |
+| `SocialServiceTests.swift` | Friend requests, leaderboards, SocialManager state management |
 
 #### Running Tests
 
@@ -122,9 +143,13 @@ xcodebuild test \
 
 #### Test Coverage Areas
 - **Models**: Initialization, encoding/decoding, computed properties
+- **SwingData**: SwingData, SwingAnalysis, ClubType, ClubCategory
 - **SwingStore**: Add/update/delete swings, persistence, statistics
 - **SwingAnalysisService**: Error handling, constants validation
 - **ScoreColorHelper**: Color mapping for all score ranges
+- **SocialModels**: User equality, UserStats ranking calculation, LeaderboardEntry formatting
+- **CloudService**: Async upload/fetch/sync, UserSession sign in/out
+- **SocialService**: Friend requests, leaderboard filtering, SocialManager state
 
 ## CI/CD Pipeline
 

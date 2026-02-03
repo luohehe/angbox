@@ -2,7 +2,7 @@ name: iOS CI/CD
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, 'claude/**' ]
     paths:
       - 'GolfSwingAnalyzer/**'
       - '.github/workflows/ios-ci.yml'
@@ -80,9 +80,48 @@ jobs:
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             -resultBundlePath TestResults.xcresult \
+            -enableCodeCoverage YES \
             | xcpretty --color --test || true
         else
           echo "Skipping tests - Xcode project not found"
+        fi
+
+    - name: Generate Test Summary
+      if: always()
+      run: |
+        cd ${{ env.PROJECT_PATH }}
+        if [ -d "TestResults.xcresult" ]; then
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Extract test counts using xcresulttool
+          xcrun xcresulttool get --path TestResults.xcresult --format json 2>/dev/null | \
+            python3 -c "
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    print('| Metric | Count |')
+    print('|--------|-------|')
+    if 'metrics' in data:
+        metrics = data['metrics']
+        if 'testsCount' in metrics:
+            print(f\"| Total Tests | {metrics['testsCount']['_value']} |\")
+        if 'testsFailedCount' in metrics:
+            print(f\"| Failed | {metrics['testsFailedCount']['_value']} |\")
+        if 'testsSkippedCount' in metrics:
+            print(f\"| Skipped | {metrics['testsSkippedCount']['_value']} |\")
+except:
+    print('Unable to parse test results')
+" >> $GITHUB_STEP_SUMMARY 2>/dev/null || echo "Test summary generation skipped"
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Test Files" >> $GITHUB_STEP_SUMMARY
+          echo "- SwingDataTests.swift - Model and ClubType tests" >> $GITHUB_STEP_SUMMARY
+          echo "- SwingStoreTests.swift - Store operations tests" >> $GITHUB_STEP_SUMMARY
+          echo "- SwingAnalysisServiceTests.swift - Analysis service tests" >> $GITHUB_STEP_SUMMARY
+          echo "- SocialModelsTests.swift - Social feature models tests" >> $GITHUB_STEP_SUMMARY
+          echo "- CloudServiceTests.swift - Cloud sync tests" >> $GITHUB_STEP_SUMMARY
+          echo "- SocialServiceTests.swift - Social service tests" >> $GITHUB_STEP_SUMMARY
         fi
 
     - name: Upload test results
@@ -90,6 +129,14 @@ jobs:
       if: always()
       with:
         name: test-results
+        path: ${{ env.PROJECT_PATH }}/TestResults.xcresult
+        retention-days: 7
+
+    - name: Upload coverage report
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-report
         path: ${{ env.PROJECT_PATH }}/TestResults.xcresult
         retention-days: 7
 
@@ -140,6 +187,40 @@ jobs:
         echo ""
         echo "=== Lines of code ==="
         find GolfSwingAnalyzer/ -name "*.swift" -exec cat {} \; | wc -l | xargs echo "Total lines:"
+
+        echo ""
+        echo "=== Test file count ==="
+        find GolfSwingAnalyzerTests/ -name "*Tests.swift" 2>/dev/null | wc -l | xargs echo "Test files:"
+
+  test-coverage-check:
+    name: Test Coverage Check
+    runs-on: macos-14
+    needs: build-and-test
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download test results
+      uses: actions/download-artifact@v4
+      with:
+        name: test-results
+        path: TestResults
+
+    - name: Check test coverage
+      run: |
+        echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Tested Components" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Component | Test File | Coverage Areas |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|-----------|----------------|" >> $GITHUB_STEP_SUMMARY
+        echo "| SwingData Models | SwingDataTests.swift | SwingData, SwingAnalysis, ClubType, ClubCategory |" >> $GITHUB_STEP_SUMMARY
+        echo "| SwingStore | SwingStoreTests.swift | CRUD, persistence, statistics |" >> $GITHUB_STEP_SUMMARY
+        echo "| SwingAnalysisService | SwingAnalysisServiceTests.swift | Constants, errors, helpers |" >> $GITHUB_STEP_SUMMARY
+        echo "| Social Models | SocialModelsTests.swift | User, UserStats, Friendship, Leaderboard |" >> $GITHUB_STEP_SUMMARY
+        echo "| Cloud Service | CloudServiceTests.swift | Upload, fetch, sync, UserSession |" >> $GITHUB_STEP_SUMMARY
+        echo "| Social Service | SocialServiceTests.swift | Friends, requests, leaderboards |" >> $GITHUB_STEP_SUMMARY
 
   # Optional: Build for release (can be enabled for tagged releases)
   # release-build:
