@@ -26,6 +26,8 @@
     <string>We need access to your microphone to record audio with your swing video.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>We need access to your photo library to import existing swing videos.</string>
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>We need permission to save your swing videos to your photo library.</string>
     <key>UIApplicationSceneManifest</key>
     <dict>
         <key>UIApplicationSupportsMultipleScenes</key>

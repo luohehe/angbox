@@ -11,6 +11,11 @@ struct AnalysisView: View {
     @State private var analysisError: Error?
     @State private var showErrorAlert = false
     @State private var showCoachView = false
+    @State private var showShareOptions = false
+    @State private var showSaveSuccess = false
+    @State private var showSaveError = false
+    @State private var showInstagramNotInstalled = false
+    @StateObject private var shareService = VideoShareService.shared
 
     private let analysisService = SwingAnalysisService()
 
@@ -27,6 +32,15 @@ struct AnalysisView: View {
                             .frame(height: 280)
                             .cornerRadius(16)
                             .padding(.horizontal)
+
+                        // Video Action Buttons
+                        VideoActionBar(
+                            onSaveToAlbum: { saveToPhotoLibrary() },
+                            onShareInstagram: { shareToInstagram() },
+                            onShareMore: { shareService.shareVideo(videoURL: videoURL) },
+                            isSaving: shareService.isSaving
+                        )
+                        .padding(.horizontal)
                     }
 
                     if isAnalyzing {
@@ -100,6 +114,62 @@ struct AnalysisView: View {
             } message: { error in
                 Text(error.localizedDescription)
             }
+            .alert("Saved!", isPresented: $showSaveSuccess) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Your swing video has been saved to your photo library.")
+            }
+            .alert("Save Failed", isPresented: $showSaveError) {
+                Button("Open Settings") {
+                    if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(settingsURL)
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(shareService.saveError?.localizedDescription ?? "Failed to save video. Please check your photo library permissions.")
+            }
+            .alert("Instagram Not Installed", isPresented: $showInstagramNotInstalled) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Instagram is not installed on this device. Please install Instagram to share your swing videos.")
+            }
+        }
+    }
+
+    // MARK: - Video Sharing Actions
+
+    private func saveToPhotoLibrary() {
+        guard let videoURL = swing.videoURL else { return }
+
+        Task {
+            let success = await shareService.saveToPhotoLibrary(videoURL: videoURL)
+            if success {
+                showSaveSuccess = true
+            } else {
+                showSaveError = true
+            }
+        }
+    }
+
+    private func shareToInstagram() {
+        guard let videoURL = swing.videoURL else { return }
+
+        if shareService.isInstagramStoriesAvailable {
+            _ = shareService.shareToInstagramStories(videoURL: videoURL)
+        } else if shareService.isInstagramInstalled {
+            // Save to library first, then user can share from Instagram
+            Task {
+                let success = await shareService.saveToPhotoLibrary(videoURL: videoURL)
+                if success {
+                    // Open Instagram
+                    if let instagramURL = URL(string: "instagram://app") {
+                        await UIApplication.shared.open(instagramURL)
+                    }
+                }
+            }
+        } else {
+            showInstagramNotInstalled = true
         }
     }
 
@@ -472,6 +542,82 @@ struct CoachPJButton: View {
     }
 }
 
+// MARK: - Video Action Bar
+struct VideoActionBar: View {
+    let onSaveToAlbum: () -> Void
+    let onShareInstagram: () -> Void
+    let onShareMore: () -> Void
+    let isSaving: Bool
+
+    var body: some View {
+        HStack(spacing: AppSpacing.sm) {
+            // Save to Album
+            VideoActionButton(
+                icon: "square.and.arrow.down.fill",
+                title: "Save",
+                color: .neverOBGreen,
+                isLoading: isSaving,
+                action: onSaveToAlbum
+            )
+
+            // Share to Instagram
+            VideoActionButton(
+                icon: "camera.fill",
+                title: "Instagram",
+                color: .instagramGradient,
+                action: onShareInstagram
+            )
+
+            // More Share Options
+            VideoActionButton(
+                icon: "square.and.arrow.up",
+                title: "More",
+                color: .blue,
+                action: onShareMore
+            )
+        }
+    }
+}
+
+// MARK: - Video Action Button
+struct VideoActionButton: View {
+    let icon: String
+    let title: String
+    let color: Color
+    var isLoading: Bool = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                if isLoading {
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                        .frame(width: 24, height: 24)
+                } else {
+                    Image(systemName: icon)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundColor(.white)
+                }
+
+                Text(title)
+                    .font(AppTypography.caption2)
+                    .foregroundColor(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, AppSpacing.sm)
+            .background(color)
+            .cornerRadius(AppCornerRadius.medium)
+        }
+        .disabled(isLoading)
+    }
+}
+
+// MARK: - Instagram Gradient Color
+extension Color {
+    static let instagramGradient = Color(red: 0.88, green: 0.19, blue: 0.42) // Instagram pink/purple
+}
+
 #Preview {
     AnalysisView(swing: SwingData())
         .environmentObject(SwingStore())
@@ -480,4 +626,14 @@ struct CoachPJButton: View {
 #Preview("Coach Button") {
     CoachPJButton {}
         .padding()
+}
+
+#Preview("Video Action Bar") {
+    VideoActionBar(
+        onSaveToAlbum: {},
+        onShareInstagram: {},
+        onShareMore: {},
+        isSaving: false
+    )
+    .padding()
 }
