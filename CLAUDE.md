@@ -30,22 +30,25 @@ angbox/
     │   ├── Models/
     │   │   ├── SwingData.swift            # Data models + ClubType
     │   │   ├── SwingStore.swift           # State management
-    │   │   └── SocialModels.swift         # User, Friendship, Leaderboard
+    │   │   ├── SocialModels.swift         # User, Friendship, Leaderboard
+    │   │   └── CoachModels.swift          # Coach PJ, feedback, drills
     │   ├── Services/
     │   │   ├── CameraService.swift        # Video recording
     │   │   ├── SwingAnalysisService.swift # AI analysis
     │   │   ├── CloudService.swift         # Cloud sync service
-    │   │   └── SocialService.swift        # Friend & leaderboard service
+    │   │   ├── SocialService.swift        # Friend & leaderboard service
+    │   │   └── CoachService.swift         # Virtual coach AI service
     │   ├── Theme/
     │   │   ├── DesignSystem.swift         # Colors, typography, components
     │   │   └── NeverOBLogo.swift          # Logo components
     │   └── Views/
     │       ├── Recording/RecordingView.swift  # Camera + club selection
-    │       ├── Analysis/AnalysisView.swift
+    │       ├── Analysis/AnalysisView.swift    # Swing analysis + Coach PJ
     │       ├── History/HistoryView.swift      # Dashboard
     │       ├── Social/
     │       │   ├── LeaderboardView.swift      # Global/friends rankings
     │       │   └── FriendsView.swift          # Friend management
+    │       ├── Coach/CoachView.swift          # Virtual Coach PJ interface
     │       └── SettingsView.swift
     └── GolfSwingAnalyzerTests/
         ├── SwingDataTests.swift           # Model + ClubType unit tests
@@ -53,7 +56,8 @@ angbox/
         ├── SwingAnalysisServiceTests.swift # Service unit tests
         ├── SocialModelsTests.swift        # Social models unit tests
         ├── CloudServiceTests.swift        # Cloud service unit tests
-        └── SocialServiceTests.swift       # Social service unit tests
+        ├── SocialServiceTests.swift       # Social service unit tests
+        └── CoachTests.swift               # Coach PJ + feedback unit tests
 ```
 
 ## Projects
@@ -70,6 +74,7 @@ angbox/
 - Swing phase scoring (address, backswing, top, downswing, impact, follow-through)
 - Detailed metrics (hip/shoulder rotation, tempo, swing plane, balance)
 - Actionable feedback and improvement suggestions
+- **Virtual Coach PJ** - personalized coaching with tips and practice drills
 - Swing history with progress tracking and dashboard
 - Club-specific statistics (Driver, Woods, Irons, Wedges, Putter)
 - Cloud sync for storing results
@@ -79,9 +84,9 @@ angbox/
 
 #### Architecture
 - **MVVM pattern** with SwiftUI
-- **Models**: `SwingData`, `SwingAnalysis`, `ClubType`, `User`, `Friendship`, `LeaderboardEntry`
-- **Services**: `CameraService`, `SwingAnalysisService`, `CloudService`, `SocialService`
-- **Views**: Tab-based navigation (Record, Dashboard, Social, Settings)
+- **Models**: `SwingData`, `SwingAnalysis`, `ClubType`, `User`, `Friendship`, `LeaderboardEntry`, `Coach`, `CoachFeedback`
+- **Services**: `CameraService`, `SwingAnalysisService`, `CloudService`, `SocialService`, `CoachService`
+- **Views**: Tab-based navigation (Record, Dashboard, Social, Settings) + Coach PJ modal
 
 #### Commands
 ```bash
@@ -126,6 +131,7 @@ The project includes comprehensive unit tests in `GolfSwingAnalyzerTests/`:
 | `SocialModelsTests.swift` | User, UserStats, Friendship, FriendRequest, LeaderboardEntry, SyncStatus |
 | `CloudServiceTests.swift` | Upload, fetch, sync operations, UserSession management |
 | `SocialServiceTests.swift` | Friend requests, leaderboards, SocialManager state management |
+| `CoachTests.swift` | Coach models, CoachMessage, CoachingSession, CoachService feedback generation |
 
 #### Running Tests
 
@@ -150,6 +156,7 @@ xcodebuild test \
 - **SocialModels**: User equality, UserStats ranking calculation, LeaderboardEntry formatting
 - **CloudService**: Async upload/fetch/sync, UserSession sign in/out
 - **SocialService**: Friend requests, leaderboard filtering, SocialManager state
+- **Coach**: Coach profile, messages, sessions, feedback generation, drills, CoachManager
 
 ## CI/CD Pipeline
 

@@ -10,6 +10,7 @@ struct AnalysisView: View {
     @State private var selectedTab = 0
     @State private var analysisError: Error?
     @State private var showErrorAlert = false
+    @State private var showCoachView = false
 
     private let analysisService = SwingAnalysisService()
 
@@ -34,6 +35,12 @@ struct AnalysisView: View {
                     } else if let analysis = swing.analysis {
                         ScoreCard(analysis: analysis)
                             .padding(.horizontal)
+
+                        // Coach PJ Button
+                        CoachPJButton {
+                            showCoachView = true
+                        }
+                        .padding(.horizontal)
 
                         Picker("View", selection: $selectedTab) {
                             Text("Phases").tag(0)
@@ -84,6 +91,9 @@ struct AnalysisView: View {
                         }
                     }
                 }
+            }
+            .sheet(isPresented: $showCoachView) {
+                CoachView(swing: swing)
             }
             .alert("Analysis Failed", isPresented: $showErrorAlert, presenting: analysisError) { _ in
                 Button("OK", role: .cancel) {}
@@ -409,7 +419,65 @@ struct FeedbackCard: View {
     }
 }
 
+// MARK: - Coach PJ Button
+struct CoachPJButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                // Coach Avatar
+                ZStack {
+                    Circle()
+                        .fill(
+                            LinearGradient(
+                                colors: [.neverOBGreen, .neverOBGreen.opacity(0.7)],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 44, height: 44)
+
+                    Text("PJ")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                        .foregroundColor(.white)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ask Coach PJ")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+
+                    Text("Get personalized tips and drills")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+
+                Spacer()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.neverOBGreen)
+            }
+            .padding()
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .fill(Color.neverOBGreen.opacity(0.1))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.neverOBGreen.opacity(0.3), lineWidth: 1)
+                    )
+            )
+        }
+    }
+}
+
 #Preview {
     AnalysisView(swing: SwingData())
         .environmentObject(SwingStore())
+}
+
+#Preview("Coach Button") {
+    CoachPJButton {}
+        .padding()
 }
