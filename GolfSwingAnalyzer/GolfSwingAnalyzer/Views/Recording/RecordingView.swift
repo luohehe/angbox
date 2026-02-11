@@ -26,7 +26,7 @@ struct RecordingView: View {
                     }
 
                     // Recording Controls
-                    VStack {
+                    VStack(spacing: 0) {
                         // Top Bar
                         RecordingTopBar(
                             showGuide: $showGuideOverlay,
@@ -35,37 +35,47 @@ struct RecordingView: View {
 
                         Spacer()
 
-                        // Club Selector (above recording controls)
-                        if !cameraService.isRecording {
-                            ClubSelectorButton(
-                                selectedClub: selectedClub,
-                                onTap: { showClubSelector = true }
-                            )
-                            .padding(.bottom, AppSpacing.md)
-                            .transition(.opacity.combined(with: .move(edge: .bottom)))
-                        }
+                        // Bottom Control Area
+                        VStack(spacing: AppSpacing.md) {
+                            // Recording Status (when recording)
+                            if cameraService.isRecording {
+                                RecordingStatusBadge(duration: cameraService.recordingDuration)
+                                    .transition(.scale.combined(with: .opacity))
+                            }
 
-                        // Recording Status
-                        if cameraService.isRecording {
-                            RecordingStatusBadge(duration: cameraService.recordingDuration)
-                                .padding(.bottom, AppSpacing.lg)
-                                .transition(.scale.combined(with: .opacity))
-                        }
+                            // Club Selector (when not recording)
+                            if !cameraService.isRecording {
+                                ClubSelectorButton(
+                                    selectedClub: selectedClub,
+                                    onTap: { showClubSelector = true }
+                                )
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                            }
 
-                        // Bottom Controls
-                        RecordingControlsBar(
-                            isRecording: cameraService.isRecording,
-                            onRecord: {
-                                withAnimation(.spring(response: 0.3)) {
-                                    if cameraService.isRecording {
-                                        cameraService.stopRecording()
-                                    } else {
-                                        cameraService.startRecording()
+                            // Bottom Controls
+                            RecordingControlsBar(
+                                isRecording: cameraService.isRecording,
+                                onRecord: {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        if cameraService.isRecording {
+                                            cameraService.stopRecording()
+                                        } else {
+                                            cameraService.startRecording()
+                                        }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                         .padding(.bottom, AppSpacing.xl)
+                        .padding(.top, AppSpacing.md)
+                        .background(
+                            LinearGradient(
+                                colors: [.clear, .black.opacity(0.5)],
+                                startPoint: .top,
+                                endPoint: .bottom
+                            )
+                            .ignoresSafeArea()
+                        )
                     }
                 } else {
                     CameraPermissionView {
@@ -186,20 +196,28 @@ struct RecordingTopBar: View {
 struct SwingGuideOverlay: View {
     var body: some View {
         GeometryReader { geometry in
+            let bottomControlsHeight: CGFloat = 200 // Height reserved for bottom controls
+
             ZStack {
                 // Vertical center line
                 Rectangle()
                     .fill(Color.golfGreen.opacity(0.5))
                     .frame(width: 2)
-                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: (geometry.size.height - bottomControlsHeight) / 2
+                    )
 
                 // Body outline guide
                 Image(systemName: "figure.golf")
-                    .font(.system(size: 200, weight: .ultraLight))
+                    .font(.system(size: 180, weight: .ultraLight))
                     .foregroundColor(.white.opacity(0.2))
-                    .position(x: geometry.size.width / 2, y: geometry.size.height / 2 - 40)
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: (geometry.size.height - bottomControlsHeight) / 2 - 20
+                    )
 
-                // Guide text
+                // Guide text - positioned above the bottom controls area
                 VStack {
                     Spacer()
                     Text("Align your stance with the guide")
@@ -209,8 +227,8 @@ struct SwingGuideOverlay: View {
                         .padding(.vertical, AppSpacing.xs)
                         .background(.ultraThinMaterial)
                         .cornerRadius(AppCornerRadius.small)
-                        .padding(.bottom, 140)
                 }
+                .padding(.bottom, bottomControlsHeight + AppSpacing.md)
             }
         }
     }
